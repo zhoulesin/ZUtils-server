@@ -22,6 +22,7 @@
         <jjwt.version>0.12.5</jjwt.version>
         <springdoc.version>2.5.0</springdoc.version>
         <lombok.version>1.18.46</lombok.version>
+        <mcp-sdk.version>1.1.2</mcp-sdk.version>
     </properties>
 
     <dependencies>
@@ -98,6 +99,16 @@
             <version>2.1.10</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-core</artifactId>
+            <version>${mcp-sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json-jackson2</artifactId>
+            <version>${mcp-sdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
