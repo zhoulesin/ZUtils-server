@@ -54,13 +54,18 @@ public class GithubStorageService {
         return cdnBaseUrl + "/" + owner + "/" + repo + "/main/" + basePath;
     }
 
+    private String repoPath(String subPath) {
+        if (basePath == null || basePath.isEmpty()) return subPath;
+        return basePath + "/" + subPath;
+    }
+
     public void uploadDex(String functionName, byte[] dexBytes) {
         if (!isConfigured()) {
             throw new RuntimeException("GitHub token not configured");
         }
         try {
             String filename = "plugin_" + functionName + "_v1.0.0.dex";
-            String path = basePath + "/dex/" + filename;
+            String path = repoPath("dex/" + filename);
             String content = Base64.getEncoder().encodeToString(dexBytes);
 
             // Check if file exists to get SHA for update
@@ -85,7 +90,7 @@ public class GithubStorageService {
         }
 
         ObjectMapper mapper = new ObjectMapper();
-        String manifestPath = basePath + "/manifest.json";
+        String manifestPath = repoPath("manifest.json");
         String dexUrl = "dex/plugin_" + functionName + "_v1.0.0.dex";
 
         try {
@@ -191,7 +196,7 @@ public class GithubStorageService {
     public boolean fileExists(String relativePath) {
         if (!isConfigured()) return false;
         try {
-            String path = basePath + "/" + relativePath;
+            String path = repoPath(relativePath);
             JsonNode result = getFile(path);
             return result != null;
         } catch (Exception e) {
@@ -202,7 +207,7 @@ public class GithubStorageService {
     public void deleteDex(String relativePath) {
         if (!isConfigured()) return;
         try {
-            String path = basePath + "/" + relativePath;
+            String path = repoPath(relativePath);
             JsonNode existing = getFile(path);
             if (existing == null) return;
 
@@ -232,7 +237,7 @@ public class GithubStorageService {
     public void removeFromManifest(String functionName) {
         if (!isConfigured()) return;
         try {
-            String manifestPath = basePath + "/manifest.json";
+        String manifestPath = repoPath("manifest.json");
             ObjectMapper mapper = new ObjectMapper();
             JsonNode existing = getFile(manifestPath);
             if (existing == null) return;

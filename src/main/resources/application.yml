@@ -37,6 +37,6 @@ app:
   github:
     token: ${GITHUB_TOKEN:}
     owner: zhoulesin
-    repo: ZUtils
-    path: zutils-plugins
+    repo: zutils-plugins
+    path: ""
     cdn-base-url: https://raw.githubusercontent.com
