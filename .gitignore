@@ -34,6 +34,11 @@ build/
 ### Logs ###
 *.log
 
+### Database ###
+data/
+*.mv.db
+*.trace.db
+
 ### File Uploads ###
 uploads/*
 !uploads/.gitkeep
