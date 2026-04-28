@@ -1,6 +1,8 @@
 package com.zutils.server.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zutils.server.service.mcp.GeoMcpService;
+import com.zutils.server.service.mcp.NewsMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import io.modelcontextprotocol.json.McpJsonMapper;

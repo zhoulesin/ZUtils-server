@@ -2,6 +2,8 @@ package com.zutils.server.controller;
 
 import com.zutils.server.model.dto.response.ApiResponse;
 import com.zutils.server.service.LlmService;
+import com.zutils.server.service.mcp.GeoMcpService;
+import com.zutils.server.service.mcp.NewsMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import io.swagger.v3.oas.annotations.Operation;
