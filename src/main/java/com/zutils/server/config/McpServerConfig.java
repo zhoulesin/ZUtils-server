@@ -46,7 +46,9 @@ public class McpServerConfig {
     public McpSyncServer mcpSyncServer(
             HttpServletStreamableServerTransportProvider transportProvider,
             WeatherMcpService weatherService,
-            TranslationMcpService translationService) {
+            TranslationMcpService translationService,
+            NewsMcpService newsService,
+            GeoMcpService geoService) {
 
         var weatherSchema = new McpSchema.JsonSchema("object", Map.of(
                 "location", Map.of("type", "string", "description", "城市名，如 北京、东京、London"),
@@ -57,6 +59,15 @@ public class McpServerConfig {
                 "text", Map.of("type", "string", "description", "要翻译的文本"),
                 "target_lang", Map.of("type", "string", "description", "目标语言代码，如 en(英语)、zh(中文)、ja(日语)")
         ), List.of("text", "target_lang"), null, null, null);
+
+        var newsSchema = new McpSchema.JsonSchema("object", Map.of(
+                "category", Map.of("type", "string", "description", "新闻类别：科技/体育/财经/娱乐（选填，默认综合）"),
+                "limit", Map.of("type", "number", "description", "返回条数（选填，默认5，最多10）")
+        ), List.of(), null, null, null);
+
+        var geoSchema = new McpSchema.JsonSchema("object", Map.of(
+                "ip", Map.of("type", "string", "description", "IP 地址（选填，不填查当前设备位置）")
+        ), List.of(), null, null, null);
 
         McpSyncServer server = McpServer.sync(transportProvider)
                 .serverInfo("zutils-mcp-server", "1.0.0")
@@ -73,15 +84,8 @@ public class McpServerConfig {
                             Map<String, Object> args = request.arguments();
                             String location = (String) args.get("location");
                             int days = args.containsKey("days") ? ((Number) args.get("days")).intValue() : 1;
-
-                            String result;
-                            if (days > 1) {
-                                result = weatherService.getForecast(location, days);
-                            } else {
-                                result = weatherService.getCurrentWeather(location);
-                            }
-
-                            log.info("[MCP Tool] weather_current(location={}, days={}) → {}", location, days, result);
+                            String result = days > 1 ? weatherService.getForecast(location, days) : weatherService.getCurrentWeather(location);
+                            log.info("[MCP] weather_current({}, {}) → {}", location, days, result);
                             return McpSchema.CallToolResult.builder()
                                     .content(List.of(new McpSchema.TextContent(result)))
                                     .build();
@@ -97,9 +101,45 @@ public class McpServerConfig {
                             Map<String, Object> args = request.arguments();
                             String text = (String) args.get("text");
                             String targetLang = (String) args.get("target_lang");
-
                             String result = translationService.translate(text, targetLang);
-                            log.info("[MCP Tool] translate_text(text={}, target={}) → {}", text, targetLang, result);
+                            log.info("[MCP] translate_text({}, {}) → {}", text, targetLang, result);
+                            return McpSchema.CallToolResult.builder()
+                                    .content(List.of(new McpSchema.TextContent(result)))
+                                    .build();
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("news_headlines")
+                                .description("获取最新新闻头条，支持分类：科技、体育、财经、娱乐")
+                                .inputSchema(newsSchema)
+                                .build(),
+                        (exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            String category = args.containsKey("category") ? (String) args.get("category") : "综合";
+                            int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+                            String result = newsService.getHeadlines(category, limit);
+                            log.info("[MCP] news_headlines({}, {})", category, limit);
+                            return McpSchema.CallToolResult.builder()
+                                    .content(List.of(new McpSchema.TextContent(result)))
+                                    .build();
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("geo_location")
+                                .description("查询 IP 地址的地理位置信息，不传 IP 则查询当前设备位置")
+                                .inputSchema(geoSchema)
+                                .build(),
+                        (exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            String result;
+                            if (args.containsKey("ip") && !((String) args.get("ip")).isBlank()) {
+                                result = geoService.queryIp((String) args.get("ip"));
+                            } else {
+                                result = geoService.getMyLocation();
+                            }
+                            log.info("[MCP] geo_location({})", args.get("ip"));
                             return McpSchema.CallToolResult.builder()
                                     .content(List.of(new McpSchema.TextContent(result)))
                                     .build();
@@ -107,7 +147,7 @@ public class McpServerConfig {
                 )
                 .build();
 
-        log.info("MCP Server started with tools: weather_current, translate_text");
+        log.info("MCP Server started with tools: weather_current, translate_text, news_headlines, geo_location");
         return server;
     }
 }

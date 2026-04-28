@@ -23,16 +23,22 @@ public class LlmController {
     private final LlmService llmService;
     private final WeatherMcpService weatherService;
     private final TranslationMcpService translationService;
+    private final NewsMcpService newsService;
+    private final GeoMcpService geoService;
 
     public LlmController(LlmService llmService,
                          WeatherMcpService weatherService,
-                         TranslationMcpService translationService) {
+                         TranslationMcpService translationService,
+                         NewsMcpService newsService,
+                         GeoMcpService geoService) {
         this.llmService = llmService;
         this.weatherService = weatherService;
         this.translationService = translationService;
+        this.newsService = newsService;
+        this.geoService = geoService;
     }
 
-    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text");
+    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location");
 
     private List<LlmService.FunctionSchema> getMcpToolSchemas() {
         return List.of(
@@ -47,6 +53,17 @@ public class LlmController {
                         List.of(
                                 new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
                                 new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
+                        )),
+                new LlmService.FunctionSchema(
+                        "news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                        List.of(
+                                new LlmService.ParamSchema("category", "新闻类别，如 科技/体育/财经/娱乐（选填）", "STRING", false),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "geo_location", "查询 IP 地址的地理位置信息，不传 IP 则查询当前设备位置",
+                        List.of(
+                                new LlmService.ParamSchema("ip", "IP 地址（选填，不填查当前设备）", "STRING", false)
                         ))
         );
     }
@@ -83,6 +100,18 @@ public class LlmController {
                     String text = (String) args.get("text");
                     String target = (String) args.get("target_lang");
                     yield translationService.translate(text, target);
+                }
+                case "news_headlines" -> {
+                    String category = args.containsKey("category") ? (String) args.get("category") : "综合";
+                    int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+                    yield newsService.getHeadlines(category, limit);
+                }
+                case "geo_location" -> {
+                    if (args.containsKey("ip") && !((String) args.get("ip")).isBlank()) {
+                        yield geoService.queryIp((String) args.get("ip"));
+                    } else {
+                        yield geoService.getMyLocation();
+                    }
                 }
                 default -> "Unknown MCP tool: " + name;
             };

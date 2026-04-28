@@ -22,14 +22,20 @@ public class McpController {
 
     private final WeatherMcpService weatherService;
     private final TranslationMcpService translationService;
+    private final NewsMcpService newsService;
+    private final GeoMcpService geoService;
     private final LlmService llmService;
 
     public McpController(
             WeatherMcpService weatherService,
             TranslationMcpService translationService,
+            NewsMcpService newsService,
+            GeoMcpService geoService,
             LlmService llmService) {
         this.weatherService = weatherService;
         this.translationService = translationService;
+        this.newsService = newsService;
+        this.geoService = geoService;
         this.llmService = llmService;
     }
 
@@ -60,6 +66,29 @@ public class McpController {
                                 ),
                                 "required", List.of("text", "target_lang")
                         )
+                ),
+                Map.of(
+                        "name", "news_headlines",
+                        "description", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "category", Map.of("type", "string", "description", "新闻类别（选填，默认综合）"),
+                                        "limit", Map.of("type", "number", "description", "返回条数（选填，默认5）")
+                                ),
+                                "required", List.of()
+                        )
+                ),
+                Map.of(
+                        "name", "geo_location",
+                        "description", "查询 IP 地址的地理位置信息，不传 IP 则查询当前设备位置",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "ip", Map.of("type", "string", "description", "IP 地址（选填）")
+                                ),
+                                "required", List.of()
+                        )
                 )
         );
         return ResponseEntity.ok(ApiResponse.success(tools));
@@ -86,6 +115,21 @@ public class McpController {
                     String text = (String) request.arguments().get("text");
                     String targetLang = (String) request.arguments().get("target_lang");
                     yield translationService.translate(text, targetLang);
+                }
+                case "news_headlines" -> {
+                    String category = request.arguments().containsKey("category")
+                            ? (String) request.arguments().get("category") : "综合";
+                    int limit = request.arguments().containsKey("limit")
+                            ? ((Number) request.arguments().get("limit")).intValue() : 5;
+                    yield newsService.getHeadlines(category, limit);
+                }
+                case "geo_location" -> {
+                    if (request.arguments().containsKey("ip")
+                            && !((String) request.arguments().get("ip")).isBlank()) {
+                        yield geoService.queryIp((String) request.arguments().get("ip"));
+                    } else {
+                        yield geoService.getMyLocation();
+                    }
                 }
                 default -> "未知工具: " + request.tool();
             };
@@ -120,6 +164,17 @@ public class McpController {
                         List.of(
                                 new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
                                 new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
+                        )),
+                new LlmService.FunctionSchema(
+                        "news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                        List.of(
+                                new LlmService.ParamSchema("category", "新闻类别（选填）", "STRING", false),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
+                        List.of(
+                                new LlmService.ParamSchema("ip", "IP 地址（选填）", "STRING", false)
                         ))
         );
 
@@ -160,6 +215,18 @@ public class McpController {
                         String text = (String) args.get("text");
                         String targetLang = (String) args.get("target_lang");
                         yield translationService.translate(text, targetLang);
+                    }
+                    case "news_headlines" -> {
+                        String category = args.containsKey("category") ? (String) args.get("category") : "综合";
+                        int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+                        yield newsService.getHeadlines(category, limit);
+                    }
+                    case "geo_location" -> {
+                        if (args.containsKey("ip") && !((String) args.get("ip")).isBlank()) {
+                            yield geoService.queryIp((String) args.get("ip"));
+                        } else {
+                            yield geoService.getMyLocation();
+                        }
                     }
                     default -> "未知函数: " + functionName;
                 };
