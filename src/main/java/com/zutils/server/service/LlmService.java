@@ -299,20 +299,20 @@ public class LlmService {
                                     .toList() : List.of()))
                     .toList() : List.of();
             String toolsJson = buildToolsJson(funcDefs);
+            String systemPrompt = buildAgentPrompt(funcDefs);
             StringBuilder msgsJson = new StringBuilder("[");
+            msgsJson.append("{\"role\":\"system\",\"content\":%s}".formatted(jsonEscape(systemPrompt)));
             for (int i = 0; i < messages.size(); i++) {
                 Map<String, Object> msg = messages.get(i);
-                if (i > 0) msgsJson.append(",");
-                msgsJson.append("{\"role\":\"%s\",\"content\":%s}"
+                msgsJson.append(",{\"role\":\"%s\",\"content\":%s}"
                         .formatted(jsonEscape((String) msg.get("role")),
                                 jsonEscape((String) msg.get("content"))));
             }
             msgsJson.append("]");
 
-            String systemPrompt = buildAgentPrompt(funcDefs);
             String requestBody = """
-                    {"model":"%s","messages":[{"role":"system","content":%s},%s],"tools":%s,"temperature":0.1}
-                    """.formatted(model, jsonEscape(systemPrompt), msgsJson, toolsJson);
+                    {"model":"%s","messages":%s,"tools":%s,"temperature":0.1}
+                    """.formatted(model, msgsJson, toolsJson);
 
             log.info("Agent request: {}", requestBody.length() > 2000 ? requestBody.substring(0, 2000) + "..." : requestBody);
 
