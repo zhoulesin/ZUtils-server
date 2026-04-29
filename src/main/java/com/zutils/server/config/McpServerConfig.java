@@ -3,6 +3,7 @@ package com.zutils.server.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zutils.server.service.mcp.GeoMcpService;
 import com.zutils.server.service.mcp.NewsMcpService;
+import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -50,7 +51,8 @@ public class McpServerConfig {
             WeatherMcpService weatherService,
             TranslationMcpService translationService,
             NewsMcpService newsService,
-            GeoMcpService geoService) {
+            GeoMcpService geoService,
+            QrMcpService qrService) {
 
         var weatherSchema = new McpSchema.JsonSchema("object", Map.of(
                 "location", Map.of("type", "string", "description", "城市名，如 北京、东京、London"),
@@ -142,6 +144,30 @@ public class McpServerConfig {
                                 result = geoService.getMyLocation();
                             }
                             log.info("[MCP] geo_location({})", args.get("ip"));
+                            return McpSchema.CallToolResult.builder()
+                                    .content(List.of(new McpSchema.TextContent(result)))
+                                    .build();
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("qrcode_generate")
+                                .description("生成二维码图片，返回 base64 编码的 PNG 图片 data URI")
+                                .inputSchema(new McpSchema.JsonSchema("object", Map.of(
+                                        "content", Map.of("type", "string", "description", "二维码内容"),
+                                        "size", Map.of("type", "number", "description", "图片尺寸（选填，默认300）"),
+                                        "foreground", Map.of("type", "string", "description", "前景色 hex（选填，默认 #000000）"),
+                                        "background", Map.of("type", "string", "description", "背景色 hex（选填，默认 #FFFFFF）")
+                                ), List.of("content"), null, null, null))
+                                .build(),
+                        (exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            String content = (String) args.get("content");
+                            int size = args.containsKey("size") ? ((Number) args.get("size")).intValue() : 300;
+                            String fg = args.containsKey("foreground") ? (String) args.get("foreground") : "#000000";
+                            String bg = args.containsKey("background") ? (String) args.get("background") : "#FFFFFF";
+                            String result = qrService.generateQrCode(content, size, fg, bg);
+                            log.info("[MCP] qrcode_generate(content={}, size={})", content, size);
                             return McpSchema.CallToolResult.builder()
                                     .content(List.of(new McpSchema.TextContent(result)))
                                     .build();

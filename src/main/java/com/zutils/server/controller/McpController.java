@@ -4,6 +4,7 @@ import com.zutils.server.model.dto.response.ApiResponse;
 import com.zutils.server.service.LlmService;
 import com.zutils.server.service.mcp.GeoMcpService;
 import com.zutils.server.service.mcp.NewsMcpService;
+import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +27,7 @@ public class McpController {
     private final TranslationMcpService translationService;
     private final NewsMcpService newsService;
     private final GeoMcpService geoService;
+    private final QrMcpService qrService;
     private final LlmService llmService;
 
     public McpController(
@@ -33,11 +35,13 @@ public class McpController {
             TranslationMcpService translationService,
             NewsMcpService newsService,
             GeoMcpService geoService,
+            QrMcpService qrService,
             LlmService llmService) {
         this.weatherService = weatherService;
         this.translationService = translationService;
         this.newsService = newsService;
         this.geoService = geoService;
+        this.qrService = qrService;
         this.llmService = llmService;
     }
 
@@ -91,6 +95,18 @@ public class McpController {
                                 ),
                                 "required", List.of()
                         )
+                ),
+                Map.of(
+                        "name", "qrcode_generate",
+                        "description", "生成二维码图片，返回 base64 编码的 PNG 图片",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "content", Map.of("type", "string", "description", "二维码内容"),
+                                        "size", Map.of("type", "number", "description", "图片尺寸（选填，默认300）")
+                                ),
+                                "required", List.of("content")
+                        )
                 )
         );
         return ResponseEntity.ok(ApiResponse.success(tools));
@@ -132,6 +148,12 @@ public class McpController {
                     } else {
                         yield geoService.getMyLocation();
                     }
+                }
+                case "qrcode_generate" -> {
+                    String content = (String) request.arguments().get("content");
+                    int size = request.arguments().containsKey("size")
+                            ? ((Number) request.arguments().get("size")).intValue() : 300;
+                    yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
                 }
                 default -> "未知工具: " + request.tool();
             };
@@ -177,6 +199,12 @@ public class McpController {
                         "geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
                         List.of(
                                 new LlmService.ParamSchema("ip", "IP 地址（选填）", "STRING", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "qrcode_generate", "生成二维码图片，返回 base64 编码的 PNG",
+                        List.of(
+                                new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
+                                new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
                         ))
         );
 
@@ -229,6 +257,11 @@ public class McpController {
                         } else {
                             yield geoService.getMyLocation();
                         }
+                    }
+                    case "qrcode_generate" -> {
+                        String content = (String) args.get("content");
+                        int size = args.containsKey("size") ? ((Number) args.get("size")).intValue() : 300;
+                        yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
                     }
                     default -> "未知函数: " + functionName;
                 };

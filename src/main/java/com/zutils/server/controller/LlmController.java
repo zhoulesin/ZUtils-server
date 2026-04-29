@@ -4,6 +4,7 @@ import com.zutils.server.model.dto.response.ApiResponse;
 import com.zutils.server.service.LlmService;
 import com.zutils.server.service.mcp.GeoMcpService;
 import com.zutils.server.service.mcp.NewsMcpService;
+import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,20 +28,23 @@ public class LlmController {
     private final TranslationMcpService translationService;
     private final NewsMcpService newsService;
     private final GeoMcpService geoService;
+    private final QrMcpService qrService;
 
     public LlmController(LlmService llmService,
                          WeatherMcpService weatherService,
                          TranslationMcpService translationService,
                          NewsMcpService newsService,
-                         GeoMcpService geoService) {
+                         GeoMcpService geoService,
+                         QrMcpService qrService) {
         this.llmService = llmService;
         this.weatherService = weatherService;
         this.translationService = translationService;
         this.newsService = newsService;
         this.geoService = geoService;
+        this.qrService = qrService;
     }
 
-    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location");
+    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate");
 
     private List<LlmService.FunctionSchema> getMcpToolSchemas() {
         return List.of(
@@ -66,6 +70,12 @@ public class LlmController {
                         "geo_location", "查询 IP 地址的地理位置信息，不传 IP 则查询当前设备位置",
                         List.of(
                                 new LlmService.ParamSchema("ip", "IP 地址（选填，不填查当前设备）", "STRING", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "qrcode_generate", "生成二维码图片，返回 base64 编码的 PNG 图片",
+                        List.of(
+                                new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
+                                new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
                         ))
         );
     }
@@ -114,6 +124,11 @@ public class LlmController {
                     } else {
                         yield geoService.getMyLocation();
                     }
+                }
+                case "qrcode_generate" -> {
+                    String content = (String) args.get("content");
+                    int size = args.containsKey("size") ? ((Number) args.get("size")).intValue() : 300;
+                    yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
                 }
                 default -> "Unknown MCP tool: " + name;
             };
