@@ -29,52 +29,126 @@ public class NewsMcpService {
 
     public String getHeadlines(String category, int limit) {
         limit = Math.min(Math.max(limit, 1), 10);
+        // Try NewsAPI first, fallback to RSS
+        String result = tryNewsApi(category, limit);
+        if (result != null) return result;
+        result = tryRssFeed(category, limit);
+        if (result != null) return result;
+        return getMockHeadlines(category, limit);
+    }
+
+    private String tryNewsApi(String category, int limit) {
         try {
+            String url;
             String cat = switch (category.toLowerCase()) {
                 case "科技", "tech" -> "technology";
                 case "体育", "sports" -> "sports";
                 case "财经", "business" -> "business";
                 case "娱乐", "entertainment" -> "entertainment";
-                default -> "top";
+                default -> null;
             };
-            String url = "https://newsapi.org/v2/top-headlines?sources=google-news" +
-                    "&pageSize=" + limit + "&apiKey=2d96074cd3814d6cb1ec8425c93f6bde";
-            if (!cat.equals("top")) {
-                url = "https://newsapi.org/v2/top-headlines?category=" + cat +
-                        "&pageSize=" + limit + "&apiKey=2d96074cd3814d6cb1ec8425c93f6bde";
+            if (cat == null) {
+                url = "https://newsapi.org/v2/top-headlines?country=us&pageSize=" + limit
+                        + "&apiKey=2d96074cd3814d6cb1ec8425c93f6bde";
+            } else {
+                url = "https://newsapi.org/v2/top-headlines?category=" + cat
+                        + "&pageSize=" + limit + "&apiKey=2d96074cd3814d6cb1ec8425c93f6bde";
             }
-
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("User-Agent", "ZUtils/1.0")
-                    .timeout(Duration.ofSeconds(10))
-                    .GET()
-                    .build();
+                    .timeout(Duration.ofSeconds(5))
+                    .GET().build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 JsonNode root = mapper.readTree(response.body());
-                JsonNode articles = root.get("articles");
-                if (articles != null && articles.isArray()) {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("📰 最新").append(category).append("新闻：\n");
-                    int count = 0;
-                    for (JsonNode article : articles) {
-                        if (count >= limit) break;
-                        String title = article.has("title") ? article.get("title").asText() : "";
-                        String source = article.has("source") && article.get("source").has("name")
-                                ? article.get("source").get("name").asText() : "";
-                        if (!title.isEmpty()) {
-                            sb.append("\n").append(count + 1).append(". ").append(title);
-                            if (!source.isEmpty()) sb.append(" (").append(source).append(")");
+                if ("ok".equals(root.get("status").asText())) {
+                    JsonNode articles = root.get("articles");
+                    if (articles != null && articles.isArray() && articles.size() > 0) {
+                        StringBuilder sb = new StringBuilder("📰 最新").append(category).append("新闻：\n");
+                        int count = 0;
+                        for (JsonNode article : articles) {
+                            if (count >= limit) break;
+                            String title = article.has("title") ? article.get("title").asText() : "";
+                            if (!title.isEmpty()) {
+                                sb.append("\n").append(count + 1).append(". ").append(title);
+                            }
+                            count++;
                         }
-                        count++;
+                        return sb.toString();
                     }
-                    return sb.toString();
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch news, using mock", e);
+            log.warn("NewsAPI failed", e);
         }
-        return category + "暂无最新新闻，请稍后重试";
+        return null;
+    }
+
+    private String tryRssFeed(String category, int limit) {
+        try {
+            String rssUrl = switch (category.toLowerCase()) {
+                case "科技", "tech" -> "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml";
+                case "体育", "sports" -> "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml";
+                case "财经", "business" -> "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml";
+                default -> "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml";
+            };
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(rssUrl))
+                    .header("User-Agent", "ZUtils/1.0")
+                    .timeout(Duration.ofSeconds(5))
+                    .GET().build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                String body = response.body();
+                StringBuilder sb = new StringBuilder("📰 最新").append(category).append("新闻：\n");
+                int count = 0;
+                int idx = 0;
+                while (true) {
+                    int start = body.indexOf("<title>", idx);
+                    if (start < 0) break;
+                    start += 7;
+                    int end = body.indexOf("</title>", start);
+                    if (end < 0) break;
+                    String title = body.substring(start, end).trim();
+                    idx = end + 8;
+                    if (title.contains("CDATA")) {
+                        int cs = title.indexOf("![CDATA[");
+                        if (cs >= 0) {
+                            title = title.substring(cs + 8, title.lastIndexOf("]]"));
+                        }
+                    }
+                    if (title.isEmpty() || title.startsWith("NYT")) continue;
+                    if (title.equals("Technology") || title.equals("Sports") || title.equals("Business")) continue;
+                    if (count >= limit) break;
+                    sb.append("\n").append(count + 1).append(". ").append(title);
+                    count++;
+                }
+                if (count > 0) return sb.toString();
+            }
+        } catch (Exception e) {
+            log.warn("RSS failed", e);
+        }
+        return null;
+    }
+
+    private String getMockHeadlines(String category, int limit) {
+        String[][] mockData = {
+            {"科技企业加速布局AI大模型，多家公司发布新产品", "AI芯片需求暴涨，供应链持续紧张"},
+            {"中国队在亚运会上再获佳绩，金牌数领先", "NBA新赛季开幕，多支球队完成重磅交易"},
+            {"央行宣布降准0.5个百分点，释放长期资金", "A股三大指数集体上涨，成交额突破万亿"},
+        };
+        int catIdx = switch (category.toLowerCase()) {
+            case "科技", "tech" -> 0;
+            case "体育", "sports" -> 1;
+            case "财经", "business" -> 2;
+            default -> new Random().nextInt(3);
+        };
+        String[] headlines = mockData[Math.min(catIdx, 2)];
+        StringBuilder sb = new StringBuilder("📰 ").append(category).append("新闻（模拟）：\n");
+        for (int i = 0; i < Math.min(limit, headlines.length); i++) {
+            sb.append("\n").append(i + 1).append(". ").append(headlines[i]);
+        }
+        return sb.toString();
     }
 }
