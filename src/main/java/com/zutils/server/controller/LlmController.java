@@ -2,11 +2,7 @@ package com.zutils.server.controller;
 
 import com.zutils.server.model.dto.response.ApiResponse;
 import com.zutils.server.service.LlmService;
-import com.zutils.server.service.mcp.GeoMcpService;
-import com.zutils.server.service.mcp.NewsMcpService;
-import com.zutils.server.service.mcp.QrMcpService;
-import com.zutils.server.service.mcp.TranslationMcpService;
-import com.zutils.server.service.mcp.WeatherMcpService;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -24,24 +20,9 @@ public class LlmController {
     private static final Logger log = LoggerFactory.getLogger(LlmController.class);
 
     private final LlmService llmService;
-    private final WeatherMcpService weatherService;
-    private final TranslationMcpService translationService;
-    private final NewsMcpService newsService;
-    private final GeoMcpService geoService;
-    private final QrMcpService qrService;
 
-    public LlmController(LlmService llmService,
-                         WeatherMcpService weatherService,
-                         TranslationMcpService translationService,
-                         NewsMcpService newsService,
-                         GeoMcpService geoService,
-                         QrMcpService qrService) {
+    public LlmController(LlmService llmService) {
         this.llmService = llmService;
-        this.weatherService = weatherService;
-        this.translationService = translationService;
-        this.newsService = newsService;
-        this.geoService = geoService;
-        this.qrService = qrService;
     }
 
     private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate");
@@ -98,46 +79,6 @@ public class LlmController {
         );
     }
 
-    private String executeMcpTool(String name, Map<String, Object> args) {
-        try {
-            return switch (name) {
-                case "weather_current" -> {
-                    String location = (String) args.get("location");
-                    int days = args.containsKey("days") ? ((Number) args.get("days")).intValue() : 1;
-                    yield days > 1
-                            ? weatherService.getForecast(location, days)
-                            : weatherService.getCurrentWeather(location);
-                }
-                case "translate_text" -> {
-                    String text = (String) args.get("text");
-                    String target = (String) args.get("target_lang");
-                    yield translationService.translate(text, target);
-                }
-                case "news_headlines" -> {
-                    String category = args.containsKey("category") ? (String) args.get("category") : "综合";
-                    int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
-                    yield newsService.getHeadlines(category, limit);
-                }
-                case "geo_location" -> {
-                    if (args.containsKey("ip") && !((String) args.get("ip")).isBlank()) {
-                        yield geoService.queryIp((String) args.get("ip"));
-                    } else {
-                        yield geoService.getMyLocation();
-                    }
-                }
-                case "qrcode_generate" -> {
-                    String content = (String) args.get("content");
-                    int size = args.containsKey("size") ? ((Number) args.get("size")).intValue() : 300;
-                    yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
-                }
-                default -> "Unknown MCP tool: " + name;
-            };
-        } catch (Exception e) {
-            log.error("MCP tool execution error: {}", name, e);
-            return "Error: " + e.getMessage();
-        }
-    }
-
     @PostMapping("/parse")
     @Operation(summary = "Parse user input into a workflow using LLM function calling (supports MCP tools)")
     public ResponseEntity<ApiResponse<LlmParseResponse>> parse(@RequestBody ParseRequest request) {
@@ -158,34 +99,15 @@ public class LlmController {
         }
 
         List<Map<String, Object>> enrichedSteps = new ArrayList<>();
-        String lastMcpResult = null;
         for (Map<String, Object> step : result.getSteps()) {
             String functionName = (String) step.get("function");
             @SuppressWarnings("unchecked")
-            Map<String, Object> args = new LinkedHashMap<>((Map<String, Object>) step.get("args"));
-
-            // 替换 {prev} 为上一步 MCP 的结果
-            if (lastMcpResult != null) {
-                for (Map.Entry<String, Object> e : args.entrySet()) {
-                    if (e.getValue() instanceof String s && s.contains("{prev}")) {
-                        args.put(e.getKey(), s.replace("{prev}", lastMcpResult));
-                    }
-                }
-            }
+            Map<String, Object> args = (Map<String, Object>) step.get("args");
 
             Map<String, Object> enriched = new LinkedHashMap<>();
             enriched.put("function", functionName);
             enriched.put("args", args);
-
-            if (MCP_TOOLS.contains(functionName)) {
-                String resultStr = executeMcpTool(functionName, args);
-                enriched.put("type", "mcp");
-                enriched.put("result", resultStr);
-                lastMcpResult = resultStr;
-                log.info("MCP tool executed: {}({}) → {}", functionName, args, resultStr);
-            } else {
-                enriched.put("type", "local");
-            }
+            enriched.put("type", MCP_TOOLS.contains(functionName) ? "mcp" : "local");
             enrichedSteps.add(enriched);
         }
 
