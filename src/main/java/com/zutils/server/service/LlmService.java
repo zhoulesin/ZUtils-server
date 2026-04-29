@@ -304,7 +304,7 @@ public class LlmService {
             msgsJson.append("{\"role\":\"system\",\"content\":%s}".formatted(jsonEscape(systemPrompt)));
             for (int i = 0; i < messages.size(); i++) {
                 Map<String, Object> msg = messages.get(i);
-                msgsJson.append(",{\"role\":\"%s\",\"content\":%s}"
+                msgsJson.append(",{\"role\":%s,\"content\":%s}"
                         .formatted(jsonEscape((String) msg.get("role")),
                                 jsonEscape((String) msg.get("content"))));
             }
