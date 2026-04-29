@@ -165,6 +165,7 @@ public class LlmService {
                 5. 不需要参数的函数传入空对象 {}
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
                 7. 函数名称必须严格使用上面列出的名称，不能自己编造。
+                8. 重要：news_headlines 返回的是英文内容。如果用户用中文询问"新闻"，你必须同时调用 translate_text 将结果翻译为中文。示例：用户问"今天科技新闻"，应返回 news_headlines(category=科技) 和 translate_text(text="...", target_lang=zh)。
                 """);
         return sb.toString();
     }
