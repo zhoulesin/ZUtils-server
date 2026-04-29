@@ -118,7 +118,11 @@ public class LlmController {
     @PostMapping("/chat")
     @Operation(summary = "Agent 模式：多轮对话，LLM 决定调工具还是回复文字")
     public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) {
+        List<LlmService.FunctionSchema> deviceFunctions = request.functions() != null
+                ? request.functions() : List.of();
+
         List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
+        allFunctions.addAll(deviceFunctions);
         allFunctions.addAll(getMcpToolSchemas());
         allFunctions.addAll(getAndroidFunctionSchemas());
 
@@ -136,7 +140,8 @@ public class LlmController {
     }
 
     public record ChatRequest(
-            List<Map<String, Object>> messages
+            List<Map<String, Object>> messages,
+            List<LlmService.FunctionSchema> functions
     ) {}
 
     public record ChatResponse(
