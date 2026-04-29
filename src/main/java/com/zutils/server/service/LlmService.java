@@ -284,11 +284,159 @@ public class LlmService {
                 .replace("\t", "\\t") + "\"";
     }
 
+    /**
+     * Agent 模式调用。不强制 tool_choice，LLM 可选择 text 回复或 tool_calls。
+     */
+    public ChatResult chat(List<Map<String, Object>> messages, List<FunctionSchema> functions) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            return ChatResult.error("LLM API key not configured");
+        }
+        try {
+            List<FunctionDef> funcDefs = functions != null ? functions.stream()
+                    .map(fs -> new FunctionDef(fs.name(), fs.description(),
+                            fs.parameters() != null ? fs.parameters().stream()
+                                    .map(p -> new ParamDef(p.name(), p.description(), p.type(), p.required()))
+                                    .toList() : List.of()))
+                    .toList() : List.of();
+            String toolsJson = buildToolsJson(funcDefs);
+            StringBuilder msgsJson = new StringBuilder("[");
+            for (int i = 0; i < messages.size(); i++) {
+                Map<String, Object> msg = messages.get(i);
+                if (i > 0) msgsJson.append(",");
+                msgsJson.append("{\"role\":\"%s\",\"content\":%s}"
+                        .formatted(jsonEscape((String) msg.get("role")),
+                                jsonEscape((String) msg.get("content"))));
+            }
+            msgsJson.append("]");
+
+            String systemPrompt = buildAgentPrompt(funcDefs);
+            String requestBody = """
+                    {"model":"%s","messages":[{"role":"system","content":%s},%s],"tools":%s,"temperature":0.1}
+                    """.formatted(model, jsonEscape(systemPrompt), msgsJson, toolsJson);
+
+            log.info("Agent request: {}", requestBody.length() > 2000 ? requestBody.substring(0, 2000) + "..." : requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.warn("Agent API error {}: {}", response.statusCode(), response.body());
+                return ChatResult.error("API error: " + response.statusCode());
+            }
+            log.info("Agent response: {}", response.body().length() > 1000 ? response.body().substring(0, 1000) + "..." : response.body());
+            return parseChatResponse(response.body());
+        } catch (Exception e) {
+            log.error("Agent chat error", e);
+            return ChatResult.error(e.getMessage());
+        }
+    }
+
+    private String buildAgentPrompt(List<FunctionDef> functions) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是 ZUtils 手机助手。你可以使用以下工具来帮助用户完成操作：\n\n");
+        for (FunctionDef fn : functions) {
+            sb.append("- ").append(fn.name()).append(": ").append(fn.description()).append("\n");
+            for (ParamDef p : fn.parameters()) {
+                sb.append("  ").append(p.name()).append(" (").append(p.type()).append(")");
+                if (p.required()) sb.append(" 必填");
+                sb.append(" - ").append(p.description()).append("\n");
+            }
+        }
+        sb.append("""
+                
+                规则：
+                1. 你需要调用工具来完成任务。每次只调用一个工具，看到工具结果后再决定下一步。
+                2. 不要一次性返回多个 tool_calls，一次只做一个操作。
+                3. 如果工具调用成功，根据结果决定是否需要继续操作。
+                4. 使用中文回复用户。
+                5. 任务完成后，回复一段总结文字给用户，不要再调工具。
+                注意：news_headlines 返回英文内容，如果需要中文需要再调 translate_text。
+                """);
+        return sb.toString();
+    }
+
+    private ChatResult parseChatResponse(String responseBody) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(responseBody);
+            JsonNode choices = root.get("choices");
+            if (choices == null || !choices.isArray() || choices.isEmpty()) {
+                return ChatResult.error("No choices");
+            }
+            JsonNode message = choices.get(0).get("message");
+            if (message == null) return ChatResult.error("No message");
+
+            JsonNode toolCalls = message.get("tool_calls");
+            if (toolCalls != null && toolCalls.isArray() && !toolCalls.isEmpty()) {
+                JsonNode tc = toolCalls.get(0);
+                JsonNode func = tc.get("function");
+                String name = func.has("name") ? func.get("name").asText() : "";
+                String argsStr = func.has("arguments") ? func.get("arguments").asText() : "{}";
+                Map<String, Object> args = new LinkedHashMap<>();
+                if (!argsStr.isEmpty() && !argsStr.equals("{}")) {
+                    JsonNode argsNode = mapper.readTree(argsStr);
+                    if (argsNode != null && argsNode.isObject()) {
+                        argsNode.fieldNames().forEachRemaining(key -> {
+                            JsonNode val = argsNode.get(key);
+                            if (val.isTextual()) args.put(key, val.asText());
+                            else if (val.isNumber()) args.put(key, val.asDouble());
+                            else if (val.isBoolean()) args.put(key, val.asBoolean());
+                            else args.put(key, val.asText());
+                        });
+                    }
+                }
+                return new ChatResult(true, name, args, null);
+            }
+
+            String content = message.has("content") ? message.get("content").asText("") : "";
+            return new ChatResult(true, null, null, content);
+
+        } catch (Exception e) {
+            log.error("Failed to parse chat response", e);
+            return ChatResult.error("Parse error: " + e.getMessage());
+        }
+    }
+
     public record FunctionDef(String name, String description, List<ParamDef> parameters) {}
     public record ParamDef(String name, String description, String type, boolean required) {}
 
     public record FunctionSchema(String name, String description, List<ParamSchema> parameters) {}
     public record ParamSchema(String name, String description, String type, boolean required) {}
+
+    public static class ChatResult {
+        private final boolean success;
+        private final String toolName;
+        private final Map<String, Object> toolArgs;
+        private final String text;
+
+        private ChatResult(boolean success, String toolName, Map<String, Object> toolArgs, String text) {
+            this.success = success;
+            this.toolName = toolName;
+            this.toolArgs = toolArgs;
+            this.text = text;
+        }
+        public static ChatResult toolCall(String name, Map<String, Object> args) {
+            return new ChatResult(true, name, args, null);
+        }
+        public static ChatResult text(String text) {
+            return new ChatResult(true, null, null, text);
+        }
+        public static ChatResult error(String error) {
+            return new ChatResult(false, null, null, error);
+        }
+
+        public boolean isSuccess() { return success; }
+        public boolean isToolCall() { return toolName != null; }
+        public String getToolName() { return toolName; }
+        public Map<String, Object> getToolArgs() { return toolArgs; }
+        public String getText() { return text; }
+    }
 
     public static class LlmResult {
         private final boolean success;

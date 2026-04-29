@@ -115,6 +115,36 @@ public class LlmController {
         return ResponseEntity.ok(ApiResponse.success("Parse completed", body));
     }
 
+    @PostMapping("/chat")
+    @Operation(summary = "Agent 模式：多轮对话，LLM 决定调工具还是回复文字")
+    public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) {
+        List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
+        allFunctions.addAll(getMcpToolSchemas());
+        allFunctions.addAll(getAndroidFunctionSchemas());
+
+        LlmService.ChatResult result = llmService.chat(request.messages(), allFunctions);
+        if (!result.isSuccess()) {
+            return ResponseEntity.ok(ApiResponse.success("Chat failed",
+                    new ChatResponse(null, null, result.getText() != null ? result.getText() : "Unknown error")));
+        }
+        if (result.isToolCall()) {
+            return ResponseEntity.ok(ApiResponse.success("Tool call",
+                    new ChatResponse(result.getToolName(), result.getToolArgs(), null)));
+        }
+        return ResponseEntity.ok(ApiResponse.success("Answer",
+                new ChatResponse(null, null, result.getText())));
+    }
+
+    public record ChatRequest(
+            List<Map<String, Object>> messages
+    ) {}
+
+    public record ChatResponse(
+            String toolName,
+            Map<String, Object> toolArgs,
+            String text
+    ) {}
+
     public record ParseRequest(
             String input,
             List<LlmService.FunctionSchema> functions
