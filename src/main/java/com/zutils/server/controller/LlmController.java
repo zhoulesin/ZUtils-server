@@ -122,9 +122,8 @@ public class LlmController {
                 ? request.functions() : List.of();
 
         List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
-        allFunctions.addAll(deviceFunctions);
-        allFunctions.addAll(getMcpToolSchemas());
-        allFunctions.addAll(getAndroidFunctionSchemas());
+        allFunctions.addAll(deviceFunctions);     // Android 内置 + DEX 插件（从设备上报）
+        allFunctions.addAll(getMcpToolSchemas()); // MCP 工具（Server 特有）
 
         LlmService.ChatResult result = llmService.chat(request.messages(), allFunctions);
         if (!result.isSuccess()) {
