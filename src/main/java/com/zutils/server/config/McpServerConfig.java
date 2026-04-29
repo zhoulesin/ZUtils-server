@@ -196,11 +196,8 @@ public class McpServerConfig {
                         }
                 )
                 .build();
-                        }
-                )
-                .build();
 
-        log.info("MCP Server started with tools: weather_current, translate_text, news_headlines, geo_location");
+        log.info("MCP Server started with tools: weather_current, translate_text, news_headlines, geo_location, qrcode_generate, web_search");
         return server;
     }
 }
