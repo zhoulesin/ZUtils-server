@@ -158,19 +158,31 @@ public class LlmController {
         }
 
         List<Map<String, Object>> enrichedSteps = new ArrayList<>();
+        String lastMcpResult = null;
         for (Map<String, Object> step : result.getSteps()) {
             String functionName = (String) step.get("function");
             @SuppressWarnings("unchecked")
-            Map<String, Object> args = (Map<String, Object>) step.get("args");
+            Map<String, Object> args = new LinkedHashMap<>((Map<String, Object>) step.get("args"));
+
+            // 替换 {prev} 为上一步 MCP 的结果
+            if (lastMcpResult != null) {
+                for (Map.Entry<String, Object> e : args.entrySet()) {
+                    if (e.getValue() instanceof String s && s.contains("{prev}")) {
+                        args.put(e.getKey(), s.replace("{prev}", lastMcpResult));
+                    }
+                }
+            }
 
             Map<String, Object> enriched = new LinkedHashMap<>();
             enriched.put("function", functionName);
             enriched.put("args", args);
 
             if (MCP_TOOLS.contains(functionName)) {
+                String resultStr = executeMcpTool(functionName, args);
                 enriched.put("type", "mcp");
-                enriched.put("result", executeMcpTool(functionName, args));
-                log.info("MCP tool executed: {}({}) → {}", functionName, args, enriched.get("result"));
+                enriched.put("result", resultStr);
+                lastMcpResult = resultStr;
+                log.info("MCP tool executed: {}({}) → {}", functionName, args, resultStr);
             } else {
                 enriched.put("type", "local");
             }

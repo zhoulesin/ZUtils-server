@@ -165,6 +165,7 @@ public class LlmService {
                 5. 不需要参数的函数传入空对象 {}
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
                 7. 函数名称必须严格使用上面列出的名称，不能自己编造。
+                8. 当你需要把上一步的结果传给下一步时，在上一步的参数中用 "{prev}" 占位。例如：用户问"美国今天科技新闻，帮我翻译成中文"，应同时返回 news_headlines(category=科技) 和 translate_text(text="{prev}", target_lang=zh)。
                 """);
         return sb.toString();
     }
