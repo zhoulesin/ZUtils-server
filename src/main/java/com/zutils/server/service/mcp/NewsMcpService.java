@@ -29,12 +29,11 @@ public class NewsMcpService {
 
     public String getHeadlines(String category, int limit) {
         limit = Math.min(Math.max(limit, 1), 10);
-        // Try NewsAPI first, fallback to RSS
         String result = tryNewsApi(category, limit);
         if (result != null) return result;
         result = tryRssFeed(category, limit);
         if (result != null) return result;
-        return getMockHeadlines(category, limit);
+        return "暂时无法获取新闻，请检查网络连接";
     }
 
     private String tryNewsApi(String category, int limit) {
