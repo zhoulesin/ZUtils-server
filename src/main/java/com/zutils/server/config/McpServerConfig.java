@@ -6,6 +6,7 @@ import com.zutils.server.service.mcp.NewsMcpService;
 import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
+import com.zutils.server.service.mcp.WebSearchMcpService;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
@@ -52,7 +53,8 @@ public class McpServerConfig {
             TranslationMcpService translationService,
             NewsMcpService newsService,
             GeoMcpService geoService,
-            QrMcpService qrService) {
+            QrMcpService qrService,
+            WebSearchMcpService webSearchService) {
 
         var weatherSchema = new McpSchema.JsonSchema("object", Map.of(
                 "location", Map.of("type", "string", "description", "城市名，如 北京、东京、London"),
@@ -152,7 +154,7 @@ public class McpServerConfig {
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("qrcode_generate")
-                                .description("生成二维码图片，返回 base64 编码的 PNG 图片 data URI")
+                                .description("生成二维码图片，返回 base64 编码的 PNG 图片")
                                 .inputSchema(new McpSchema.JsonSchema("object", Map.of(
                                         "content", Map.of("type", "string", "description", "二维码内容"),
                                         "size", Map.of("type", "number", "description", "图片尺寸（选填，默认300）"),
@@ -171,6 +173,29 @@ public class McpServerConfig {
                             return McpSchema.CallToolResult.builder()
                                     .content(List.of(new McpSchema.TextContent(result)))
                                     .build();
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("web_search")
+                                .description("搜索互联网，返回网页标题、链接和摘要")
+                                .inputSchema(new McpSchema.JsonSchema("object", Map.of(
+                                        "query", Map.of("type", "string", "description", "搜索关键词"),
+                                        "limit", Map.of("type", "number", "description", "返回条数（选填，默认5）")
+                                ), List.of("query"), null, null, null))
+                                .build(),
+                        (exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            String query = (String) args.get("query");
+                            int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+                            String result = webSearchService.search(query, limit);
+                            log.info("[MCP] web_search(query={})", query);
+                            return McpSchema.CallToolResult.builder()
+                                    .content(List.of(new McpSchema.TextContent(result)))
+                                    .build();
+                        }
+                )
+                .build();
                         }
                 )
                 .build();

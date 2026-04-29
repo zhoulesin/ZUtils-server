@@ -25,7 +25,7 @@ public class LlmController {
         this.llmService = llmService;
     }
 
-    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate");
+    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate", "web_search");
 
     private List<LlmService.FunctionSchema> getMcpToolSchemas() {
         return List.of(
@@ -57,6 +57,12 @@ public class LlmController {
                         List.of(
                                 new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
                                 new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "web_search", "搜索互联网，返回网页标题、链接和摘要",
+                        List.of(
+                                new LlmService.ParamSchema("query", "搜索关键词", "STRING", true),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
                         ))
         );
     }

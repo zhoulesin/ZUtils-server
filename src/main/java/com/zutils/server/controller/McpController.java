@@ -7,6 +7,7 @@ import com.zutils.server.service.mcp.NewsMcpService;
 import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
+import com.zutils.server.service.mcp.WebSearchMcpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -28,6 +29,7 @@ public class McpController {
     private final NewsMcpService newsService;
     private final GeoMcpService geoService;
     private final QrMcpService qrService;
+    private final WebSearchMcpService webSearchService;
     private final LlmService llmService;
 
     public McpController(
@@ -36,12 +38,14 @@ public class McpController {
             NewsMcpService newsService,
             GeoMcpService geoService,
             QrMcpService qrService,
+            WebSearchMcpService webSearchService,
             LlmService llmService) {
         this.weatherService = weatherService;
         this.translationService = translationService;
         this.newsService = newsService;
         this.geoService = geoService;
         this.qrService = qrService;
+        this.webSearchService = webSearchService;
         this.llmService = llmService;
     }
 
@@ -107,6 +111,18 @@ public class McpController {
                                 ),
                                 "required", List.of("content")
                         )
+                ),
+                Map.of(
+                        "name", "web_search",
+                        "description", "搜索互联网，返回网页标题、链接和摘要",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "query", Map.of("type", "string", "description", "搜索关键词"),
+                                        "limit", Map.of("type", "number", "description", "返回条数（选填，默认5）")
+                                ),
+                                "required", List.of("query")
+                        )
                 )
         );
         return ResponseEntity.ok(ApiResponse.success(tools));
@@ -154,6 +170,12 @@ public class McpController {
                     int size = request.arguments().containsKey("size")
                             ? ((Number) request.arguments().get("size")).intValue() : 300;
                     yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
+                }
+                case "web_search" -> {
+                    String query = (String) request.arguments().get("query");
+                    int limit = request.arguments().containsKey("limit")
+                            ? ((Number) request.arguments().get("limit")).intValue() : 5;
+                    yield webSearchService.search(query, limit);
                 }
                 default -> "未知工具: " + request.tool();
             };
@@ -205,6 +227,12 @@ public class McpController {
                         List.of(
                                 new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
                                 new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "web_search", "搜索互联网，返回网页标题、链接和摘要",
+                        List.of(
+                                new LlmService.ParamSchema("query", "搜索关键词", "STRING", true),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
                         ))
         );
 
@@ -262,6 +290,11 @@ public class McpController {
                         String content = (String) args.get("content");
                         int size = args.containsKey("size") ? ((Number) args.get("size")).intValue() : 300;
                         yield qrService.generateQrCode(content, size, "#000000", "#FFFFFF");
+                    }
+                    case "web_search" -> {
+                        String query = (String) args.get("query");
+                        int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+                        yield webSearchService.search(query, limit);
                     }
                     default -> "未知函数: " + functionName;
                 };

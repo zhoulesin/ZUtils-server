@@ -358,6 +358,7 @@ public class LlmService {
                 5. 任务完成后，回复一段总结文字给用户，不要再调工具。
                 注意：news_headlines 返回英文内容，如果需要中文需要再调 translate_text。
                 6. 如果调用了 news_headlines 获取到多条新闻，一次传给 translate_text 翻译全部，不要逐条翻译。
+                7. 当用户问你不知道的信息（如最新消息、名人、事件等），使用 web_search 搜索。web_search 返回结果后根据内容直接回复用户。
                 """);
         return sb.toString();
     }
