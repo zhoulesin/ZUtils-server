@@ -228,12 +228,12 @@ public class DexGenerationService {
         sb.append("                s = s.trimStart { it == ',' }\n");
         sb.append("            }\n");
         sb.append("        }\n");
-        sb.append("        val result = run(args)\n");
+        sb.append("        val result = run(args, _bridge)\n");
         sb.append("        val r = result?.toString() ?: \"null\"\n");
         sb.append("        val jr = r.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n");
         sb.append("        return \"{\\\"result\\\":\\\"\" + jr + \"\\\",\\\"type\\\":\\\"TEXT\\\"}\"\n");
         sb.append("    }\n\n");
-        sb.append("    private fun run(args: Map<String, Any?>): Any? {\n");
+        sb.append("    private fun run(args: Map<String, Any?>, bridge: Any?): Any? {\n");
         sb.append(indent(userCode, 8)).append("\n");
         sb.append("    }\n");
         sb.append("}\n");
