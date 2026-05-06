@@ -44,6 +44,32 @@ public class TestController {
         }
     }
 
+    @PostMapping("/publish-bridge-dex")
+    @Operation(summary = "Generate bridge-style DEX from Java source code (ApiBridge pattern)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> publishBridgeDex(
+            @RequestBody BridgeDexRequest request) {
+
+        DexGenerationService.DexResult dex = dexGenerationService.generateJavaDex(
+                request.code(), request.className());
+
+        if (!dex.isSuccess()) {
+            return ResponseEntity.ok(ApiResponse.success("Bridge DEX generation failed", Map.of(
+                    "success", false, "error", dex.getError())));
+        }
+
+        String dexFilename = "bridge_" + request.className() + "_v1.0.0.dex";
+        String dexUrl = storageService.store(dex.getDexBytes(), dexFilename);
+
+        Map<String, Object> body = Map.of(
+                "success", true,
+                "dexUrl", dexUrl,
+                "dexSize", dex.getSize(),
+                "className", "com.zutils.bridge.dex." + request.className(),
+                "functionName", request.functionName()
+        );
+        return ResponseEntity.ok(ApiResponse.success("Bridge DEX generated", body));
+    }
+
     @PostMapping("/publish-dex")
     @Operation(summary = "Generate DEX plugin from tested Kotlin code")
     public ResponseEntity<ApiResponse<Map<String, Object>>> publishDex(
@@ -115,6 +141,12 @@ public class TestController {
         );
         return ResponseEntity.ok(ApiResponse.success(presets));
     }
+
+    public record BridgeDexRequest(
+            String code,
+            String className,
+            String functionName
+    ) {}
 
     public record RunCodeRequest(
             String code,

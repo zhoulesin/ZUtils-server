@@ -21,10 +21,87 @@ public class DexGenerationService {
     private static final long TIMEOUT_SECONDS = 60;
 
     /**
+     * Generate a DEX from a Java bridge-style source.
+     * The Java class must have:
+     *   - setApiBridge(ApiBridge)
+     *   - execute(Map<String, String>): String
+     * The ApiBridge interface is automatically included in the classpath.
+     */
+    public DexResult generateJavaDex(String sourceCode, String className) {
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("zutils-jdex-");
+            Path apiBridgeFile = tempDir.resolve("ApiBridge.java");
+            Path sourceFile = tempDir.resolve(className + ".java");
+            Path classDir = tempDir.resolve("out");
+            Path jarFile = tempDir.resolve("input.jar");
+            Path dexOutDir = tempDir.resolve("dex_out");
+            Files.createDirectories(classDir);
+            Files.createDirectories(dexOutDir);
+
+            // Write ApiBridge.java to classpath
+            String apiBridgeSource = """
+                    package com.zutils.bridge;
+                    import java.util.List;
+                    public interface ApiBridge {
+                        String callApi(String apiTag, List<String> params);
+                    }
+                    """;
+            Files.writeString(apiBridgeFile, apiBridgeSource, StandardCharsets.UTF_8);
+            Files.writeString(sourceFile, sourceCode, StandardCharsets.UTF_8);
+
+            String javaBin = findJavaBin().replace("/bin/java", "/bin/javac");
+
+            // Step 1: Compile Java → .class files
+            String[] compileCmd = {
+                    javaBin, "-d", classDir.toAbsolutePath().toString(),
+                    "-source", "17", "-target", "17",
+                    apiBridgeFile.toAbsolutePath().toString(),
+                    sourceFile.toAbsolutePath().toString()
+            };
+            if (exec(compileCmd, "Javac") != 0) {
+                return DexResult.failure("Java compilation failed");
+            }
+
+            // Step 2: .class files → JAR
+            try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarFile.toFile()))) {
+                Files.walk(classDir)
+                        .filter(p -> p.toString().endsWith(".class"))
+                        .forEach(p -> {
+                            try {
+                                String entryName = classDir.relativize(p).toString();
+                                jos.putNextEntry(new JarEntry(entryName));
+                                jos.write(Files.readAllBytes(p));
+                                jos.closeEntry();
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        });
+            }
+
+            // Step 3: JAR → DEX via d8
+            String d8 = findD8();
+            if (d8 == null) return DexResult.failure("d8 tool not found");
+            String[] d8Cmd = {d8, "--release", "--output", dexOutDir.toAbsolutePath().toString(),
+                    "--min-api", "24", jarFile.toAbsolutePath().toString()};
+            if (exec(d8Cmd, "D8") != 0) return DexResult.failure("DEX conversion failed");
+
+            Path dexFile = dexOutDir.resolve("classes.dex");
+            if (!Files.exists(dexFile)) return DexResult.failure("DEX output not found");
+
+            byte[] dexBytes = Files.readAllBytes(dexFile);
+            return DexResult.success(dexBytes, dexBytes.length);
+
+        } catch (Exception e) {
+            log.error("Java DEX generation error", e);
+            return DexResult.failure(e.getMessage());
+        } finally {
+            if (tempDir != null) deleteRecursively(tempDir.toFile());
+        }
+    }
+
+    /**
      * Generate a DEX file from user's Kotlin run() function.
-     * The generated DEX contains a simple class with a no-arg constructor
-     * and a `run(Map<String, Any?>): Any?` method — no ZFunction dependency.
-     * Android side uses an adapter to wrap it as ZFunction.
      */
     public DexResult generate(String userCode, String functionName, String className) {
         Path tempDir = null;
