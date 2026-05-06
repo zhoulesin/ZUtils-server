@@ -24,148 +24,110 @@ public class WebSearchMcpService {
 
     public WebSearchMcpService() {
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(8))
                 .build();
         this.mapper = new ObjectMapper();
     }
 
     public String search(String query, int limit) {
         limit = Math.min(Math.max(limit, 1), 8);
-        log.info("WebSearch: query={}, limit={}", query, limit);
-        List<String> results = tryDuckDuckGo(query, limit);
-        if (!results.isEmpty()) return formatResults(query, results);
-        results = tryGoogleSearch(query, limit);
-        if (!results.isEmpty()) return formatResults(query, results);
+        log.info("WebSearch: query={}", query);
+
+        List<String> results = tryWikipedia(query, limit);
+        if (!results.isEmpty()) return format("维基百科", query, results);
+
+        results = tryDdgInstant(query, limit);
+        if (!results.isEmpty()) return format("DuckDuckGo", query, results);
+
         return "无法搜索到结果，请稍后重试";
     }
 
-    private String formatResults(String query, List<String> items) {
+    private String format(String source, String query, List<String> items) {
         StringBuilder sb = new StringBuilder();
-        sb.append("🔍 ").append(query).append(" 搜索结果：\n");
+        sb.append("🔍 ").append(query).append(" 搜索结果（").append(source).append("）：\n");
         for (int i = 0; i < items.size(); i++) {
             sb.append("\n").append(i + 1).append(". ").append(items.get(i));
         }
         return sb.toString();
     }
 
-    private List<String> tryDuckDuckGo(String query, int limit) {
+    private List<String> tryWikipedia(String query, int limit) {
         try {
-            String url = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+            boolean isChinese = query.codePoints().anyMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN);
+            String wikiLang = isChinese ? "zh.wikipedia.org" : "en.wikipedia.org";
+            String wikiLink = isChinese ? "https://zh.wikipedia.org/wiki/" : "https://en.wikipedia.org/wiki/";
+            String url = "https://" + wikiLang + "/w/api.php?action=query&list=search&srsearch="
+                    + URLEncoder.encode(query, StandardCharsets.UTF_8)
+                    + "&srlimit=" + limit + "&format=json&origin=*";
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(java.net.URI.create(url))
-                    .header("User-Agent", "Mozilla/5.0 (compatible; ZUtils/1.0)")
-                    .timeout(Duration.ofSeconds(8))
+                    .header("User-Agent", "ZUtils/1.0")
+                    .timeout(Duration.ofSeconds(6))
                     .GET().build();
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) {
-                String body = resp.body();
-                List<String> results = new ArrayList<>();
-                int idx = 0;
-                int count = 0;
-                while (true) {
-                    // DuckDuckGo HTML results are in <a class="result__a" href="...">
-                    int hrefStart = body.indexOf("class=\"result__a\"", idx);
-                    if (hrefStart < 0) break;
-                    int linkStart = body.indexOf("href=\"", hrefStart);
-                    if (linkStart < 0) break;
-                    linkStart += 6;
-                    int linkEnd = body.indexOf("\"", linkStart);
-                    if (linkEnd < 0) break;
-                    String link = body.substring(linkStart, linkEnd);
-                    // Skip ads and internal links
-                    if (link.contains("//duckduckgo.com/l/")) {
-                        int realUrlStart = link.indexOf("uddg=");
-                        if (realUrlStart > 0) {
-                            String encoded = link.substring(realUrlStart + 5);
-                            int ampPos = encoded.indexOf('&');
-                            if (ampPos > 0) encoded = encoded.substring(0, ampPos);
-                            link = java.net.URLDecoder.decode(encoded, StandardCharsets.UTF_8);
-                        }
+                JsonNode root = mapper.readTree(resp.body());
+                JsonNode search = root.at("/query/search");
+                if (search != null && search.isArray() && search.size() > 0) {
+                    List<String> results = new ArrayList<>();
+                    for (JsonNode hit : search) {
+                        String title = hit.has("title") ? hit.get("title").asText() : "";
+                        String snippet = hit.has("snippet") ? hit.get("snippet").asText()
+                                .replaceAll("<[^>]+>", "").trim() : "";
+                        String link = wikiLink + URLEncoder.encode(title.replace(' ', '_'), StandardCharsets.UTF_8);
+                        results.add(title + "\n   " + link + "\n   " + snippet);
+                        if (results.size() >= limit) break;
                     }
-                    // Find title
-                    int titleStart = body.indexOf("result__a", hrefStart);
-                    titleStart = body.indexOf(">", titleStart) + 1;
-                    int titleEnd = body.indexOf("</a>", titleStart);
-                    String title = body.substring(titleStart, titleEnd).replaceAll("<[^>]+>", "").trim();
-                    // Find snippet
-                    int snippetStart = body.indexOf("class=\"result__snippet\"", titleEnd);
-                    if (snippetStart > 0) {
-                        snippetStart = body.indexOf(">", snippetStart) + 1;
-                        int snippetEnd = body.indexOf("</a>", snippetStart);
-                        if (snippetEnd < 0) snippetEnd = body.indexOf("</span>", snippetStart);
-                        if (snippetEnd > snippetStart) {
-                            String snippet = body.substring(snippetStart, snippetEnd)
-                                    .replaceAll("<[^>]+>", "").trim();
-                            results.add(title + "\n   " + link + "\n   " + snippet);
-                        }
-                    } else {
-                        results.add(title + "\n   " + link);
-                    }
-                    count++;
-                    idx = titleEnd + 4;
-                    if (count >= limit) break;
+                    return results;
                 }
-                return results;
             }
         } catch (Exception e) {
-            log.warn("DuckDuckGo search failed", e);
+            log.warn("Wikipedia search failed", e);
         }
         return List.of();
     }
 
-    private List<String> tryGoogleSearch(String query, int limit) {
+    private List<String> tryDdgInstant(String query, int limit) {
         try {
-            // Use a public Google search frontend
-            String url = "https://www.google.com/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8) + "&hl=en";
+            String url = "https://api.duckduckgo.com/?q="
+                    + URLEncoder.encode(query, StandardCharsets.UTF_8)
+                    + "&format=json&no_html=1&skip_disambig=1";
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(java.net.URI.create(url))
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", "ZUtils/1.0")
                     .timeout(Duration.ofSeconds(5))
                     .GET().build();
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) {
-                String body = resp.body();
+                JsonNode root = mapper.readTree(resp.body());
                 List<String> results = new ArrayList<>();
-                int idx = 0;
-                int count = 0;
-                while (true) {
-                    int h3Start = body.indexOf("<h3", idx);
-                    if (h3Start < 0) break;
-                    int linkStart = body.indexOf("<a", h3Start);
-                    if (linkStart < 0) break;
-                    int hrefStart = body.indexOf("href=\"", linkStart);
-                    if (hrefStart < 0) break;
-                    hrefStart += 6;
-                    int hrefEnd = body.indexOf("\"", hrefStart);
-                    if (hrefEnd < 0) break;
-                    String href = body.substring(hrefStart, hrefEnd);
-                    if (!href.startsWith("http")) { idx = hrefEnd + 1; continue; }
-                    int titleStart = body.indexOf(">", h3Start) + 1;
-                    int titleEnd = body.indexOf("</h3>", titleStart);
-                    if (titleEnd < 0) break;
-                    String title = body.substring(titleStart, titleEnd).replaceAll("<[^>]+>", "").trim();
-                    // Snippet
-                    int snipStart = body.indexOf("<div class=\"VwiC3b", titleEnd);
-                    if (snipStart > 0) {
-                        snipStart = body.indexOf(">", snipStart) + 1;
-                        int snipEnd = body.indexOf("</div>", snipStart);
-                        if (snipEnd < 0) snipEnd = Math.min(body.indexOf("<div", snipStart), body.indexOf("</span>", snipStart));
-                        if (snipEnd > snipStart) {
-                            String snippet = body.substring(snipStart, snipEnd).replaceAll("<[^>]+>", "").trim();
-                            results.add(title + "\n   " + href + "\n   " + snippet);
-                        }
-                    } else {
-                        results.add(title + "\n   " + href);
-                    }
-                    count++;
-                    idx = titleEnd + 5;
-                    if (count >= limit) break;
+
+                // Abstract (instant answer)
+                if (root.has("AbstractText") && !root.get("AbstractText").asText().isEmpty()) {
+                    String text = root.get("AbstractText").asText();
+                    String source = root.has("AbstractSource") ? root.get("AbstractSource").asText() : "";
+                    String link = root.has("AbstractURL") ? root.get("AbstractURL").asText() : "";
+                    results.add("📖 " + text.substring(0, Math.min(text.length(), 300))
+                            + (text.length() > 300 ? "…" : ""));
+                    if (!link.isEmpty()) results.add("   来源: " + source + " - " + link);
                 }
-                return results;
+
+                // Related topics
+                if (root.has("RelatedTopics") && root.get("RelatedTopics").isArray()) {
+                    for (JsonNode topic : root.get("RelatedTopics")) {
+                        if (topic.has("Text")) {
+                            String text = topic.get("Text").asText();
+                            results.add(text.length() > 200 ? text.substring(0, 200) + "…" : text);
+                            if (results.size() >= limit + 1) break;
+                        }
+                    }
+                }
+                // Remove the Abstract info from count
+                int realLimit = results.size() > 1 ? limit + 1 : limit;
+                return results.subList(0, Math.min(results.size(), realLimit));
             }
         } catch (Exception e) {
-            log.warn("Google search failed", e);
+            log.warn("DDG instant search failed", e);
         }
         return List.of();
     }
