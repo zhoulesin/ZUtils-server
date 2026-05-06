@@ -118,7 +118,7 @@ public class KotlinSandboxService {
                 .collect(Collectors.joining(",\n"));
 
         return """
-                fun run(args: Map<String, Any?>): Any? {
+                fun run(args: Map<String, Any?>, bridge: Any? = null): Any? {
                 %s
                 }
 
