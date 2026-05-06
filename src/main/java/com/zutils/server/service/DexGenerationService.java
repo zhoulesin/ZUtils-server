@@ -190,7 +190,10 @@ public class DexGenerationService {
         StringBuilder sb = new StringBuilder();
         sb.append("package com.zutils.generated\n\n");
         sb.append("class ").append(className).append(" {\n");
-        sb.append("    val functionName: String = \"").append(functionName).append("\"\n\n");
+        sb.append("    val functionName: String = \"").append(functionName).append("\"\n");
+        sb.append("    @Volatile\n");
+        sb.append("    private var _bridge: Any? = null\n\n");
+        sb.append("    fun setApiBridge(bridge: Any) { _bridge = bridge }\n\n");
         sb.append("    fun handle(input: String): String {\n");
         sb.append("        val args = mutableMapOf<String, Any?>()\n");
         sb.append("        val ak = \"\\\"args\\\":\"\n");
