@@ -117,4 +117,11 @@ ZUtils-server/
     └── resources/
         ├── application.yml
         └── data.sql    # 种子数据（开发者 + 示例插件）
+
+## 文档索引
+
+- [架构设计](ARCHITECTURE.md)（`docs/server/ARCHITECTURE.md`）
+- [API 参考](API.md)（`docs/server/API.md`）
+- [数据模型](DATA-MODEL.md)（`docs/server/DATA-MODEL.md`）
+- [配置与部署](DEPLOYMENT.md)（`docs/server/DEPLOYMENT.md`）
 ```

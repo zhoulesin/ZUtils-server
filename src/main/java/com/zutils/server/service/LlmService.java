@@ -12,7 +12,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.net.ConnectException;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -43,6 +45,26 @@ public class LlmService {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("app.llm.api-key is empty — LLM / Agent will not work until configured.");
+        } else {
+            log.info("LLM configured: baseUrl={}, model={}", baseUrl, model);
+        }
+    }
+
+    /** 把连接类异常转成可读说明（不记录密钥）。 */
+    private static String describeHttpConnectFailure(Throwable e) {
+        Throwable cur = e;
+        while (cur != null) {
+            if (cur instanceof UnknownHostException) {
+                return "无法解析大模型域名（UnknownHostException）。请检查 DNS 与 app.llm.base-url。";
+            }
+            if (cur instanceof ConnectException) {
+                return "无法连接大模型服务（ConnectException）。请检查本机出网、公司代理/防火墙，以及当前环境能否访问火山方舟 URL。";
+            }
+            cur = cur.getCause();
+        }
+        return null;
     }
 
     public LlmResult parseIntent(String userInput, List<FunctionSchema> builtinFunctions) {
@@ -108,8 +130,9 @@ public class LlmService {
             return parseResponse(response.body(), userInput);
 
         } catch (Exception e) {
-            log.error("LLM parse error", e);
-            return LlmResult.error(e.getMessage());
+            log.error("LLM parse error, baseUrl={}", baseUrl, e);
+            String hint = describeHttpConnectFailure(e);
+            return LlmResult.error(hint != null ? hint : (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
         }
     }
 
@@ -166,6 +189,7 @@ public class LlmService {
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
                 7. 函数名称必须严格使用上面列出的名称，不能自己编造。
                 8. 重要：news_headlines 返回的是英文内容。如果用户用中文询问"新闻"，你必须同时调用 translate_text 将结果翻译为中文。示例：用户问"今天科技新闻"，应返回 news_headlines(category=科技) 和 translate_text(text="...", target_lang=zh)。
+                9. 日期时间字符串（如 createCalendarEvent 的 startTime/endTime）：优先带时区（Z 或 +08:00）；若无后缀如 2026-05-10T15:00，表示用户设备本地墙钟时间。与 docs/contracts/zutils-datetime-strings.md 一致。
                 """);
         return sb.toString();
     }
@@ -309,8 +333,9 @@ public class LlmService {
             JsonNode root = new ObjectMapper().readTree(response.body());
             return root.path("choices").get(0).path("message").path("content").asText("[空回复]");
         } catch (Exception e) {
-            log.error("simpleChat error", e);
-            return "[LLM 调用失败: " + e.getMessage() + "]";
+            log.error("simpleChat error, baseUrl={}", baseUrl, e);
+            String hint = describeHttpConnectFailure(e);
+            return "[LLM 调用失败: " + (hint != null ? hint : (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())) + "]";
         }
     }
 
@@ -362,8 +387,10 @@ public class LlmService {
             log.info("Agent response: {}", response.body().length() > 1000 ? response.body().substring(0, 1000) + "..." : response.body());
             return parseChatResponse(response.body());
         } catch (Exception e) {
-            log.error("Agent chat error", e);
-            return ChatResult.error(e.getMessage());
+            log.error("Agent chat error, baseUrl={}, model={}", baseUrl, model, e);
+            String hint = describeHttpConnectFailure(e);
+            String msg = hint != null ? hint : (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            return ChatResult.error(msg);
         }
     }
 

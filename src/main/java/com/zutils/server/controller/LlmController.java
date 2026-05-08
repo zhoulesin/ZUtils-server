@@ -1,10 +1,7 @@
 package com.zutils.server.controller;
 
 import com.zutils.server.model.dto.response.ApiResponse;
-import com.zutils.server.model.dto.response.PluginManifestResponse;
 import com.zutils.server.service.LlmService;
-import com.zutils.server.service.PluginService;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -13,207 +10,100 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/llm")
-@Tag(name = "LLM Engine", description = "Server-side LLM intent parsing with MCP tool execution")
+@Tag(name = "LLM Integration", description = "LLM intent parsing and chat API for Android client")
 public class LlmController {
 
     private static final Logger log = LoggerFactory.getLogger(LlmController.class);
 
     private final LlmService llmService;
-    private final PluginService pluginService;
 
-    public LlmController(LlmService llmService, PluginService pluginService) {
+    public LlmController(LlmService llmService) {
         this.llmService = llmService;
-        this.pluginService = pluginService;
-    }
-
-    private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate", "web_search");
-
-    private List<LlmService.FunctionSchema> getMcpToolSchemas() {
-        return List.of(
-                new LlmService.FunctionSchema(
-                        "weather_current", "查询指定城市的实时天气和未来预报",
-                        List.of(
-                                new LlmService.ParamSchema("location", "城市名，如 北京、东京", "STRING", true),
-                                new LlmService.ParamSchema("days", "预报天数（选填，默认1）", "NUMBER", false)
-                        )),
-                new LlmService.FunctionSchema(
-                        "translate_text", "将文本翻译成目标语言",
-                        List.of(
-                                new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
-                                new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
-                        )),
-                new LlmService.FunctionSchema(
-                        "news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
-                        List.of(
-                                new LlmService.ParamSchema("category", "新闻类别，如 科技/体育/财经/娱乐（选填）", "STRING", false),
-                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
-                        )),
-                new LlmService.FunctionSchema(
-                        "geo_location", "查询 IP 地址的地理位置信息，不传 IP 则查询当前设备位置",
-                        List.of(
-                                new LlmService.ParamSchema("ip", "IP 地址（选填，不填查当前设备）", "STRING", false)
-                        )),
-                new LlmService.FunctionSchema(
-                        "qrcode_generate", "生成二维码图片，返回 base64 编码的 PNG 图片",
-                        List.of(
-                                new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
-                                new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
-                        )),
-                new LlmService.FunctionSchema(
-                        "web_search", "搜索互联网，返回网页标题、链接和摘要",
-                        List.of(
-                                new LlmService.ParamSchema("query", "搜索关键词", "STRING", true),
-                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
-                        ))
-        );
-    }
-
-    private List<LlmService.FunctionSchema> getPluginSchemas() {
-        try {
-            List<LlmService.FunctionSchema> schemas = new ArrayList<>();
-            List<PluginManifestResponse> manifest = pluginService.getManifest();
-            for (PluginManifestResponse p : manifest) {
-                List<LlmService.ParamSchema> params = new ArrayList<>();
-                if (p.getParameters() != null) {
-                    for (com.zutils.server.model.dto.ParameterDto param : p.getParameters()) {
-                        params.add(new LlmService.ParamSchema(
-                                param.getName(), param.getDescription() != null ? param.getDescription() : "",
-                                param.getType() != null ? param.getType() : "STRING",
-                                param.isRequired()));
-                    }
-                }
-                schemas.add(new LlmService.FunctionSchema(
-                        p.getFunctionName(),
-                        p.getDescription() != null ? p.getDescription() : p.getFunctionName(),
-                        params));
-            }
-            return schemas;
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    private List<LlmService.FunctionSchema> getAndroidFunctionSchemas() {
-        return List.of(
-                new LlmService.FunctionSchema(
-                        "send_notification", "发送系统通知到 Android 通知栏",
-                        List.of(
-                                new LlmService.ParamSchema("title", "通知标题", "STRING", true),
-                                new LlmService.ParamSchema("content", "通知内容", "STRING", true)
-                        )),
-                new LlmService.FunctionSchema(
-                        "create_automation", "创建自动化定时规则。用户说'每天X点做Y'时需要调用此函数",
-                        List.of(
-                                new LlmService.ParamSchema("name", "规则名称", "STRING", true),
-                                new LlmService.ParamSchema("cron", "Cron 表达式，如'0 8 * * *'表示每天8点", "STRING", true),
-                                new LlmService.ParamSchema("steps", "执行的步骤列表，JSON 字符串，每步包含 function/args/type", "STRING", true)
-                        ))
-        );
     }
 
     @PostMapping("/parse")
-    @Operation(summary = "Parse user input into a workflow using LLM function calling (supports MCP tools)")
-    public ResponseEntity<ApiResponse<LlmParseResponse>> parse(@RequestBody ParseRequest request) {
-        List<LlmService.FunctionSchema> deviceFunctions = request.functions() != null
-                ? request.functions() : List.of();
+    @Operation(summary = "Parse user input into function call steps (used by Android ServerLlmClient)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> parseIntent(@RequestBody Map<String, Object> body) {
+        String userInput = (String) body.getOrDefault("input", "");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rawFunctions = (List<Map<String, Object>>) body.getOrDefault("functions", List.of());
 
-        List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
-        allFunctions.addAll(deviceFunctions);
-        allFunctions.addAll(getMcpToolSchemas());
-        allFunctions.addAll(getAndroidFunctionSchemas());
+        List<LlmService.FunctionSchema> functions = rawFunctions.stream()
+                .map(this::toFunctionSchema)
+                .collect(Collectors.toList());
 
-        LlmService.LlmResult result = llmService.parseIntent(request.input(), allFunctions);
+        log.info("LLM parse: input='{}', functions={}", userInput, functions.size());
 
-        if (!result.isSuccess()) {
-            LlmParseResponse body = new LlmParseResponse(
-                    List.of(), result.getError() != null ? result.getError() : "Unknown error");
-            return ResponseEntity.ok(ApiResponse.success("Parse failed", body));
+        LlmService.LlmResult result = llmService.parseIntent(userInput, functions);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (result.isSuccess()) {
+            data.put("steps", result.getSteps());
+            data.put("error", null);
+        } else {
+            data.put("steps", List.of());
+            data.put("error", result.getError());
         }
 
-        List<Map<String, Object>> enrichedSteps = new ArrayList<>();
-        for (Map<String, Object> step : result.getSteps()) {
-            String functionName = (String) step.get("function");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> args = (Map<String, Object>) step.get("args");
-
-            Map<String, Object> enriched = new LinkedHashMap<>();
-            enriched.put("function", functionName);
-            enriched.put("args", args);
-            enriched.put("type", MCP_TOOLS.contains(functionName) ? "mcp" : "local");
-            enrichedSteps.add(enriched);
-        }
-
-        LlmParseResponse body = new LlmParseResponse(enrichedSteps, null);
-        return ResponseEntity.ok(ApiResponse.success("Parse completed", body));
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     @PostMapping("/chat")
-    @Operation(summary = "Agent 模式：多轮对话，LLM 决定调工具还是回复文字")
-    public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) {
-        List<LlmService.FunctionSchema> deviceFunctions = request.functions() != null
-                ? request.functions() : List.of();
+    @Operation(summary = "Chat with LLM, returns tool call or text response (used by Android ServerLlmClient)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> chat(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rawMessages = (List<Map<String, Object>>) body.getOrDefault("messages", List.of());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rawFunctions = (List<Map<String, Object>>) body.getOrDefault("functions", List.of());
 
-        List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
-        allFunctions.addAll(deviceFunctions);     // Android 内置函数
-        allFunctions.addAll(getMcpToolSchemas()); // MCP 工具（Server 特有）
-        allFunctions.addAll(getPluginSchemas());   // DEX 插件（Server manifest）
+        List<LlmService.FunctionSchema> functions = rawFunctions.stream()
+                .map(this::toFunctionSchema)
+                .collect(Collectors.toList());
 
-        LlmService.ChatResult result = llmService.chat(request.messages(), allFunctions);
-        if (!result.isSuccess()) {
-            return ResponseEntity.ok(ApiResponse.success("Chat failed",
-                    new ChatResponse(null, null, result.getText() != null ? result.getText() : "Unknown error", null, null, null, null, null)));
+        log.info("LLM chat: messages={}, functions={}", rawMessages.size(), functions.size());
+
+        LlmService.ChatResult result = llmService.chat(rawMessages, functions);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (result.isSuccess() && result.isToolCall()) {
+            data.put("toolName", result.getToolName());
+            data.put("toolArgs", result.getToolArgs());
+            data.put("type", "local");
+            data.put("text", null);
+            data.put("dexUrl", null);
+            data.put("className", null);
+            data.put("checksum", null);
+            data.put("signature", null);
+        } else if (result.isSuccess()) {
+            data.put("toolName", null);
+            data.put("toolArgs", null);
+            data.put("text", result.getText() != null ? result.getText() : "");
+        } else {
+            data.put("toolName", null);
+            data.put("toolArgs", null);
+            data.put("text", result.getText() != null ? result.getText() : "LLM 不可用");
         }
-        if (result.isToolCall()) {
-            String toolName = result.getToolName();
-            // Check if this is a DEX plugin and attach metadata
-            String dexUrl = null, className = null, checksum = null, signature = null, type = "local";
-            try {
-                List<PluginManifestResponse> manifest = pluginService.getManifest();
-                for (PluginManifestResponse p : manifest) {
-                    if (toolName.equals(p.getFunctionName())) {
-                        dexUrl = p.getDexUrl();
-                        className = p.getClassName();
-                        checksum = p.getChecksum();
-                        type = "tool";
-                        break;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to check DEX manifest for {}", toolName, e);
-            }
-            return ResponseEntity.ok(ApiResponse.success("Tool call",
-                    new ChatResponse(toolName, result.getToolArgs(), null, dexUrl, className, checksum, signature, type)));
-        }
-        return ResponseEntity.ok(ApiResponse.success("Answer",
-                new ChatResponse(null, null, result.getText(), null, null, null, null, null)));
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
-    public record ChatRequest(
-            List<Map<String, Object>> messages,
-            List<LlmService.FunctionSchema> functions
-    ) {}
-
-    public record ChatResponse(
-            String toolName,
-            Map<String, Object> toolArgs,
-            String text,
-            String dexUrl,
-            String className,
-            String checksum,
-            String signature,
-            String type
-    ) {}
-
-    public record ParseRequest(
-            String input,
-            List<LlmService.FunctionSchema> functions
-    ) {}
-
-    public record LlmParseResponse(
-            List<Map<String, Object>> steps,
-            String error
-    ) {}
+    private LlmService.FunctionSchema toFunctionSchema(Map<String, Object> raw) {
+        String name = (String) raw.getOrDefault("name", "");
+        String description = (String) raw.getOrDefault("description", "");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rawParams = (List<Map<String, Object>>) raw.getOrDefault("parameters", List.of());
+        List<LlmService.ParamSchema> params = rawParams.stream()
+                .map(p -> new LlmService.ParamSchema(
+                        (String) p.getOrDefault("name", ""),
+                        (String) p.getOrDefault("description", ""),
+                        (String) p.getOrDefault("type", "STRING"),
+                        p.containsKey("required") && Boolean.TRUE.equals(p.get("required"))
+                ))
+                .collect(Collectors.toList());
+        return new LlmService.FunctionSchema(name, description, params);
+    }
 }
