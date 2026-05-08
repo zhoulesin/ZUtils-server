@@ -39,6 +39,10 @@ data/
 *.mv.db
 *.trace.db
 
+### Keys ###
+keys/*.pem
+!keys/.gitkeep
+
 ### File Uploads ###
 uploads/*
 !uploads/.gitkeep

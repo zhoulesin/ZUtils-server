@@ -285,6 +285,36 @@ public class LlmService {
     }
 
     /**
+     * 简单问答：输入一句话，返回文本回复（无工具调用）。
+     */
+    public String simpleChat(String prompt) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            return "[LLM 未配置]";
+        }
+        try {
+            String requestBody = """
+                    {"model":"%s","messages":[{"role":"user","content":%s}],"temperature":0.3}
+                    """.formatted(model, jsonEscape(prompt));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(Duration.ofSeconds(30))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) return "[LLM API error: " + response.statusCode() + "]";
+            JsonNode root = new ObjectMapper().readTree(response.body());
+            return root.path("choices").get(0).path("message").path("content").asText("[空回复]");
+        } catch (Exception e) {
+            log.error("simpleChat error", e);
+            return "[LLM 调用失败: " + e.getMessage() + "]";
+        }
+    }
+
+    /**
      * Agent 模式调用。不强制 tool_choice，LLM 可选择 text 回复或 tool_calls。
      */
     public ChatResult chat(List<Map<String, Object>> messages, List<FunctionSchema> functions) {

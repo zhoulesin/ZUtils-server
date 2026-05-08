@@ -16,6 +16,7 @@ import com.zutils.server.model.enums.PluginCategory;
 import com.zutils.server.model.enums.VersionStatus;
 import com.zutils.server.repository.PluginRepository;
 import com.zutils.server.repository.PluginVersionRepository;
+import com.zutils.server.repository.DeveloperRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -35,6 +36,7 @@ public class PluginService {
 
     private final PluginRepository pluginRepository;
     private final PluginVersionRepository pluginVersionRepository;
+    private final DeveloperRepository developerRepository;
     private final StorageService storageService;
     private final ObjectMapper objectMapper;
 
@@ -56,6 +58,9 @@ public class PluginService {
                     .className(version.getClassName())
                     .checksum(version.getChecksum())
                     .size(version.getDexSize())
+                    .author(plugin.getAuthor())
+                    .memberUid(getDeveloperMemberUid(plugin.getDeveloperId()))
+                    .authorNickname(getDeveloperNickname(plugin.getDeveloperId()))
                     .parameters(parseJsonList(version.getParameters(), ParameterDto.class))
                     .requiredPermissions(parseJsonList(version.getRequiredPermissions(), String.class))
                     .dependencies(parseJsonList(version.getDependencies(), DependencyDto.class))
@@ -82,6 +87,14 @@ public class PluginService {
                 .map(this::toPluginListResponse)
                 .toList();
 
+        return new PageImpl<>(responses, pageable, pluginPage.getTotalElements());
+    }
+
+    public Page<PluginListResponse> getMyPlugins(Long developerId, Pageable pageable) {
+        Page<Plugin> pluginPage = pluginRepository.findByDeveloperId(developerId, pageable);
+        List<PluginListResponse> responses = pluginPage.getContent().stream()
+                .map(this::toPluginListResponse)
+                .toList();
         return new PageImpl<>(responses, pageable, pluginPage.getTotalElements());
     }
 
@@ -212,6 +225,7 @@ public class PluginService {
                 .icon(plugin.getIcon())
                 .category(plugin.getCategory().name())
                 .author(plugin.getAuthor())
+                .authorNickname(getDeveloperNickname(plugin.getDeveloperId()))
                 .version(latest.map(PluginVersion::getVersion).orElse(null))
                 .downloads(plugin.getDownloads())
                 .rating(plugin.getRating())
@@ -252,6 +266,20 @@ public class PluginService {
                 .status(v.getStatus().name())
                 .publishedAt(v.getPublishedAt().format(DTF))
                 .build();
+    }
+
+    private String getDeveloperMemberUid(Long developerId) {
+        if (developerId == null) return null;
+        return developerRepository.findById(developerId)
+                .map(d -> d.getMemberUid())
+                .orElse(null);
+    }
+
+    private String getDeveloperNickname(Long developerId) {
+        if (developerId == null) return null;
+        return developerRepository.findById(developerId)
+                .map(d -> d.getNickname() != null ? d.getNickname() : d.getUsername())
+                .orElse(null);
     }
 
     private <T> List<T> parseJsonList(String json, Class<T> elementType) {

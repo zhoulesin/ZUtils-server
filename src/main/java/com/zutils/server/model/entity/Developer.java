@@ -22,6 +22,18 @@ public class Developer {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
+    @Column(length = 50)
+    private String nickname;
+
+    @Column(name = "member_uid", unique = true, length = 50)
+    private String memberUid;
+
+    @Column(length = 500)
+    private String avatarUrl;
+
+    @Column(columnDefinition = "TEXT")
+    private String bio;
+
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
@@ -37,11 +49,35 @@ public class Developer {
     @Builder.Default
     private boolean enabled = true;
 
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private boolean deleted = false;
+
+    @Column(name = "login_fail_count")
+    @Builder.Default
+    private int loginFailCount = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private boolean emailVerified = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

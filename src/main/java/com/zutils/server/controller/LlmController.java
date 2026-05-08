@@ -1,7 +1,9 @@
 package com.zutils.server.controller;
 
 import com.zutils.server.model.dto.response.ApiResponse;
+import com.zutils.server.model.dto.response.PluginManifestResponse;
 import com.zutils.server.service.LlmService;
+import com.zutils.server.service.PluginService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,9 +22,11 @@ public class LlmController {
     private static final Logger log = LoggerFactory.getLogger(LlmController.class);
 
     private final LlmService llmService;
+    private final PluginService pluginService;
 
-    public LlmController(LlmService llmService) {
+    public LlmController(LlmService llmService, PluginService pluginService) {
         this.llmService = llmService;
+        this.pluginService = pluginService;
     }
 
     private static final Set<String> MCP_TOOLS = Set.of("weather_current", "translate_text", "news_headlines", "geo_location", "qrcode_generate", "web_search");
@@ -65,6 +69,31 @@ public class LlmController {
                                 new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
                         ))
         );
+    }
+
+    private List<LlmService.FunctionSchema> getPluginSchemas() {
+        try {
+            List<LlmService.FunctionSchema> schemas = new ArrayList<>();
+            List<PluginManifestResponse> manifest = pluginService.getManifest();
+            for (PluginManifestResponse p : manifest) {
+                List<LlmService.ParamSchema> params = new ArrayList<>();
+                if (p.getParameters() != null) {
+                    for (com.zutils.server.model.dto.ParameterDto param : p.getParameters()) {
+                        params.add(new LlmService.ParamSchema(
+                                param.getName(), param.getDescription() != null ? param.getDescription() : "",
+                                param.getType() != null ? param.getType() : "STRING",
+                                param.isRequired()));
+                    }
+                }
+                schemas.add(new LlmService.FunctionSchema(
+                        p.getFunctionName(),
+                        p.getDescription() != null ? p.getDescription() : p.getFunctionName(),
+                        params));
+            }
+            return schemas;
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private List<LlmService.FunctionSchema> getAndroidFunctionSchemas() {
@@ -128,20 +157,38 @@ public class LlmController {
                 ? request.functions() : List.of();
 
         List<LlmService.FunctionSchema> allFunctions = new ArrayList<>();
-        allFunctions.addAll(deviceFunctions);     // Android 内置 + DEX 插件（从设备上报）
+        allFunctions.addAll(deviceFunctions);     // Android 内置函数
         allFunctions.addAll(getMcpToolSchemas()); // MCP 工具（Server 特有）
+        allFunctions.addAll(getPluginSchemas());   // DEX 插件（Server manifest）
 
         LlmService.ChatResult result = llmService.chat(request.messages(), allFunctions);
         if (!result.isSuccess()) {
             return ResponseEntity.ok(ApiResponse.success("Chat failed",
-                    new ChatResponse(null, null, result.getText() != null ? result.getText() : "Unknown error")));
+                    new ChatResponse(null, null, result.getText() != null ? result.getText() : "Unknown error", null, null, null, null, null)));
         }
         if (result.isToolCall()) {
+            String toolName = result.getToolName();
+            // Check if this is a DEX plugin and attach metadata
+            String dexUrl = null, className = null, checksum = null, signature = null, type = "local";
+            try {
+                List<PluginManifestResponse> manifest = pluginService.getManifest();
+                for (PluginManifestResponse p : manifest) {
+                    if (toolName.equals(p.getFunctionName())) {
+                        dexUrl = p.getDexUrl();
+                        className = p.getClassName();
+                        checksum = p.getChecksum();
+                        type = "tool";
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to check DEX manifest for {}", toolName, e);
+            }
             return ResponseEntity.ok(ApiResponse.success("Tool call",
-                    new ChatResponse(result.getToolName(), result.getToolArgs(), null)));
+                    new ChatResponse(toolName, result.getToolArgs(), null, dexUrl, className, checksum, signature, type)));
         }
         return ResponseEntity.ok(ApiResponse.success("Answer",
-                new ChatResponse(null, null, result.getText())));
+                new ChatResponse(null, null, result.getText(), null, null, null, null, null)));
     }
 
     public record ChatRequest(
@@ -152,7 +199,12 @@ public class LlmController {
     public record ChatResponse(
             String toolName,
             Map<String, Object> toolArgs,
-            String text
+            String text,
+            String dexUrl,
+            String className,
+            String checksum,
+            String signature,
+            String type
     ) {}
 
     public record ParseRequest(

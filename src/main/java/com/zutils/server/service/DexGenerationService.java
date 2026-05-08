@@ -2,12 +2,15 @@ package com.zutils.server.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.*;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
@@ -19,6 +22,76 @@ public class DexGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(DexGenerationService.class);
     private static final long TIMEOUT_SECONDS = 60;
+    private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
+
+    private final boolean signEnabled;
+    private final String privateKeyPath;
+    private PrivateKey privateKey;
+
+    public DexGenerationService(
+            @Value("${app.dex.sign.enabled:true}") boolean signEnabled,
+            @Value("${app.dex.sign.private-key-path:keys/private_key.pem}") String privateKeyPath) {
+        this.signEnabled = signEnabled;
+        this.privateKeyPath = privateKeyPath;
+    }
+
+    private PrivateKey getPrivateKey() {
+        if (!signEnabled) return null;
+        if (privateKey != null) return privateKey;
+        synchronized (this) {
+            if (privateKey != null) return privateKey;
+            try {
+                Path path = Path.of(privateKeyPath);
+                if (!Files.exists(path)) {
+                    log.warn("Private key not found at {}, DEX signing disabled", path);
+                    return null;
+                }
+                String pem = Files.readString(path);
+                String base64 = pem
+                        .replace("-----BEGIN PRIVATE KEY-----", "")
+                        .replace("-----END PRIVATE KEY-----", "")
+                        .replaceAll("\\s", "");
+                byte[] encoded = Base64.getDecoder().decode(base64);
+                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(encoded);
+                KeyFactory kf = KeyFactory.getInstance("RSA");
+                privateKey = kf.generatePrivate(keySpec);
+                log.info("DEX signing private key loaded from {}", privateKeyPath);
+                return privateKey;
+            } catch (Exception e) {
+                log.error("Failed to load private key from {}", privateKeyPath, e);
+                return null;
+            }
+        }
+    }
+
+    public static String sha256Hex(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder("sha256:");
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b & 0xff));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    private String sign(byte[] dexBytes) {
+        PrivateKey key = getPrivateKey();
+        if (key == null) return "";
+        try {
+            Signature sig = Signature.getInstance(SIGNATURE_ALGORITHM);
+            sig.initSign(key);
+            sig.update(dexBytes);
+            byte[] signatureBytes = sig.sign();
+            return Base64.getEncoder().encodeToString(signatureBytes);
+        } catch (Exception e) {
+            log.error("Failed to sign DEX", e);
+            return "";
+        }
+    }
 
     /**
      * Generate a DEX from a Java bridge-style source.
@@ -90,7 +163,9 @@ public class DexGenerationService {
             if (!Files.exists(dexFile)) return DexResult.failure("DEX output not found");
 
             byte[] dexBytes = Files.readAllBytes(dexFile);
-            return DexResult.success(dexBytes, dexBytes.length);
+            String checksum = sha256Hex(dexBytes);
+            String signature = sign(dexBytes);
+            return DexResult.success(dexBytes, dexBytes.length, checksum, signature, SIGNATURE_ALGORITHM);
 
         } catch (Exception e) {
             log.error("Java DEX generation error", e);
@@ -176,7 +251,9 @@ public class DexGenerationService {
                 return DexResult.failure("DEX output file not found");
             }
             byte[] dexBytes = Files.readAllBytes(dexFile);
-            return DexResult.success(dexBytes, dexBytes.length);
+            String checksum = sha256Hex(dexBytes);
+            String signature = sign(dexBytes);
+            return DexResult.success(dexBytes, dexBytes.length, checksum, signature, SIGNATURE_ALGORITHM);
 
         } catch (Exception e) {
             log.error("DEX generation error", e);
@@ -249,7 +326,6 @@ public class DexGenerationService {
                 }
             }
         }
-        // Fallback: scan Maven local repo
         String m2 = Path.of(System.getProperty("user.home"), ".m2", "repository").toString();
         try {
             return Files.walk(Path.of(m2))
@@ -271,10 +347,8 @@ public class DexGenerationService {
     }
 
     private String getJvmClasspath() {
-        // Use full server classpath so subprocess has kotlin-stdlib etc.
         String cp = System.getProperty("java.class.path");
         if (cp != null && !cp.isEmpty()) return cp;
-        // Fallback: scan Maven local repo
         String m2 = Path.of(System.getProperty("user.home"), ".m2", "repository").toString();
         try {
             return Files.walk(Path.of(m2))
@@ -355,24 +429,36 @@ public class DexGenerationService {
         private final byte[] dexBytes;
         private final int size;
         private final String error;
+        private final String checksum;
+        private final String signature;
+        private final String signatureAlgorithm;
 
-        private DexResult(boolean success, byte[] dexBytes, int size, String error) {
+        private DexResult(boolean success, byte[] dexBytes, int size, String error,
+                          String checksum, String signature, String signatureAlgorithm) {
             this.success = success;
             this.dexBytes = dexBytes;
             this.size = size;
             this.error = error;
+            this.checksum = checksum;
+            this.signature = signature;
+            this.signatureAlgorithm = signatureAlgorithm;
         }
 
-        public static DexResult success(byte[] dexBytes, int size) {
-            return new DexResult(true, dexBytes, size, null);
+        public static DexResult success(byte[] dexBytes, int size,
+                                         String checksum, String signature, String signatureAlgorithm) {
+            return new DexResult(true, dexBytes, size, null, checksum, signature, signatureAlgorithm);
         }
+
         public static DexResult failure(String error) {
-            return new DexResult(false, null, 0, error);
+            return new DexResult(false, null, 0, error, null, null, null);
         }
 
         public boolean isSuccess() { return success; }
         public byte[] getDexBytes() { return dexBytes; }
         public int getSize() { return size; }
         public String getError() { return error; }
+        public String getChecksum() { return checksum; }
+        public String getSignature() { return signature; }
+        public String getSignatureAlgorithm() { return signatureAlgorithm; }
     }
 }

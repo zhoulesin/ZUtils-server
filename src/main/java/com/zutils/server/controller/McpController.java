@@ -8,6 +8,8 @@ import com.zutils.server.service.mcp.QrMcpService;
 import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import com.zutils.server.service.mcp.WebSearchMcpService;
+import com.zutils.server.service.mcp.EmailMcpService;
+import com.zutils.server.service.mcp.DocumentMcpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -30,6 +32,8 @@ public class McpController {
     private final GeoMcpService geoService;
     private final QrMcpService qrService;
     private final WebSearchMcpService webSearchService;
+    private final EmailMcpService emailService;
+    private final DocumentMcpService documentService;
     private final LlmService llmService;
 
     public McpController(
@@ -39,6 +43,8 @@ public class McpController {
             GeoMcpService geoService,
             QrMcpService qrService,
             WebSearchMcpService webSearchService,
+            EmailMcpService emailService,
+            DocumentMcpService documentService,
             LlmService llmService) {
         this.weatherService = weatherService;
         this.translationService = translationService;
@@ -46,6 +52,8 @@ public class McpController {
         this.geoService = geoService;
         this.qrService = qrService;
         this.webSearchService = webSearchService;
+        this.emailService = emailService;
+        this.documentService = documentService;
         this.llmService = llmService;
     }
 
@@ -123,6 +131,31 @@ public class McpController {
                                 ),
                                 "required", List.of("query")
                         )
+                ),
+                Map.of(
+                        "name", "email_send",
+                        "description", "发送邮件到指定收件人，支持HTML格式正文",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "to", Map.of("type", "string", "description", "收件人邮箱"),
+                                        "subject", Map.of("type", "string", "description", "邮件主题"),
+                                        "body", Map.of("type", "string", "description", "邮件正文（支持HTML）")
+                                ),
+                                "required", List.of("to", "subject", "body")
+                        )
+                ),
+                Map.of(
+                        "name", "document_summarize",
+                        "description", "对文档内容进行摘要总结或润色优化",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "content", Map.of("type", "string", "description", "文档文本内容"),
+                                        "action", Map.of("type", "string", "description", "summarize(摘要) 或 polish(润色)，默认 summarize")
+                                ),
+                                "required", List.of("content")
+                        )
                 )
         );
         return ResponseEntity.ok(ApiResponse.success(tools));
@@ -176,6 +209,20 @@ public class McpController {
                     int limit = request.arguments().containsKey("limit")
                             ? ((Number) request.arguments().get("limit")).intValue() : 5;
                     yield webSearchService.search(query, limit);
+                }
+                case "email_send" -> {
+                    String to = (String) request.arguments().get("to");
+                    String subject = (String) request.arguments().get("subject");
+                    String body = (String) request.arguments().get("body");
+                    yield emailService.send(to, subject, body);
+                }
+                case "document_summarize" -> {
+                    String content = (String) request.arguments().get("content");
+                    String action = request.arguments().containsKey("action")
+                            ? (String) request.arguments().get("action") : "summarize";
+                    yield "polish".equals(action)
+                            ? documentService.polish(content)
+                            : documentService.summarize(content);
                 }
                 default -> "未知工具: " + request.tool();
             };
@@ -233,6 +280,19 @@ public class McpController {
                         List.of(
                                 new LlmService.ParamSchema("query", "搜索关键词", "STRING", true),
                                 new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
+                        )),
+                new LlmService.FunctionSchema(
+                        "email_send", "发送邮件到指定收件人",
+                        List.of(
+                                new LlmService.ParamSchema("to", "收件人邮箱", "STRING", true),
+                                new LlmService.ParamSchema("subject", "邮件主题", "STRING", true),
+                                new LlmService.ParamSchema("body", "邮件正文", "STRING", true)
+                        )),
+                new LlmService.FunctionSchema(
+                        "document_summarize", "对文档内容进行摘要总结或润色优化",
+                        List.of(
+                                new LlmService.ParamSchema("content", "文档文本内容", "STRING", true),
+                                new LlmService.ParamSchema("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false)
                         ))
         );
 
@@ -295,6 +355,19 @@ public class McpController {
                         String query = (String) args.get("query");
                         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
                         yield webSearchService.search(query, limit);
+                    }
+                    case "email_send" -> {
+                        String to = (String) args.get("to");
+                        String subject = (String) args.get("subject");
+                        String body = (String) args.get("body");
+                        yield emailService.send(to, subject, body);
+                    }
+                    case "document_summarize" -> {
+                        String content = (String) args.get("content");
+                        String action = args.containsKey("action") ? (String) args.get("action") : "summarize";
+                        yield "polish".equals(action)
+                                ? documentService.polish(content)
+                                : documentService.summarize(content);
                     }
                     default -> "未知函数: " + functionName;
                 };

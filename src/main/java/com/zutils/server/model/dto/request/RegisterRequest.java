@@ -10,15 +10,21 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RegisterRequest {
-    @NotBlank
-    @Size(min = 3, max = 50)
+    @NotBlank(message = "用户名不能为空")
+    @Size(min = 3, max = 50, message = "用户名需要 3-50 个字符")
     private String username;
 
-    @NotBlank
-    @Email
+    @NotBlank(message = "邮箱不能为空")
+    @Email(message = "邮箱格式不正确")
     private String email;
 
-    @NotBlank
-    @Size(min = 6, max = 100)
+    @NotBlank(message = "密码不能为空")
+    @Size(min = 6, max = 100, message = "密码需要 6-100 个字符")
     private String password;
+
+    @Size(max = 50)
+    private String nickname;
+
+    @Size(max = 50)
+    private String memberUid;
 }

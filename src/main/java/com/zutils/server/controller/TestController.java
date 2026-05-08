@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -60,13 +61,15 @@ public class TestController {
         String dexFilename = "bridge_" + request.className() + "_v1.0.0.dex";
         String dexUrl = storageService.store(dex.getDexBytes(), dexFilename);
 
-        Map<String, Object> body = Map.of(
-                "success", true,
-                "dexUrl", dexUrl,
-                "dexSize", dex.getSize(),
-                "className", "com.zutils.bridge.dex." + request.className(),
-                "functionName", request.functionName()
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("dexUrl", dexUrl);
+        body.put("dexSize", dex.getSize());
+        body.put("className", "com.zutils.bridge.dex." + request.className());
+        body.put("functionName", request.functionName());
+        body.put("checksum", dex.getChecksum());
+        body.put("signature", dex.getSignature());
+        body.put("signatureAlgorithm", dex.getSignatureAlgorithm());
         return ResponseEntity.ok(ApiResponse.success("Bridge DEX generated", body));
     }
 
@@ -95,13 +98,15 @@ public class TestController {
         String dexFilename = "plugin_" + request.functionName() + "_v1.0.0.dex";
         String dexUrl = storageService.store(dex.getDexBytes(), dexFilename);
 
-        Map<String, Object> body = Map.of(
-                "success", true,
-                "dexUrl", dexUrl,
-                "dexSize", dex.getSize(),
-                "className", "com.zutils.generated." + request.className(),
-                "functionName", request.functionName()
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("dexUrl", dexUrl);
+        body.put("dexSize", dex.getSize());
+        body.put("className", "com.zutils.generated." + request.className());
+        body.put("functionName", request.functionName());
+        body.put("checksum", dex.getChecksum());
+        body.put("signature", dex.getSignature());
+        body.put("signatureAlgorithm", dex.getSignatureAlgorithm());
 
         return ResponseEntity.ok(ApiResponse.success("DEX generated", body));
     }
@@ -114,19 +119,6 @@ public class TestController {
                 """
                 val name = args["name"]?.toString() ?: "World"
                 return "Hello, $name!"
-                """,
-                "calculate",
-                """
-                val a = args["a"]?.toString()?.toIntOrNull() ?: 0
-                val b = args["b"]?.toString()?.toIntOrNull() ?: 0
-                val op = args["op"]?.toString() ?: "+"
-                return when (op) {
-                    "+" -> a + b
-                    "-" -> a - b
-                    "*" -> a * b
-                    "/" -> if (b != 0) a / b else "division by zero"
-                    else -> "unknown op"
-                }
                 """,
                 "uuid",
                 """

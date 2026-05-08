@@ -18,6 +18,10 @@ spring:
   sql:
     init:
       mode: always
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
   servlet:
     multipart:
       max-file-size: 50MB
@@ -34,6 +38,19 @@ app:
     api-key: c11df110-89fe-45e8-a4a4-aac27e61522a
     base-url: https://ark.cn-beijing.volces.com/api/coding/v3
     model: Doubao-Seed-2.0-lite
+  dex:
+    sign:
+      enabled: true
+      private-key-path: ${user.dir}/keys/private_key.pem
+      public-key-path: ${user.dir}/keys/public_key.pem
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
   github:
     token: ${GITHUB_TOKEN:}
     owner: zhoulesin

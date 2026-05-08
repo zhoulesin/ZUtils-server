@@ -1,15 +1,21 @@
 package com.zutils.server.service;
 
+import com.zutils.server.exception.BusinessException;
 import com.zutils.server.model.entity.Developer;
+import com.zutils.server.model.entity.LoginLog;
 import com.zutils.server.model.entity.Plugin;
 import com.zutils.server.model.entity.PluginVersion;
 import com.zutils.server.model.enums.Role;
 import com.zutils.server.model.enums.VersionStatus;
 import com.zutils.server.repository.DeveloperRepository;
+import com.zutils.server.repository.LoginLogRepository;
 import com.zutils.server.repository.PluginRepository;
 import com.zutils.server.repository.PluginVersionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +31,7 @@ public class AdminService {
     private final PluginVersionRepository versionRepository;
     private final DeveloperRepository developerRepository;
     private final PasswordEncoder passwordEncoder;
+    private final LoginLogRepository loginLogRepository;
     private final GithubStorageService githubStorageService;
 
     public Map<String, Object> getStats() {
@@ -66,6 +73,7 @@ public class AdminService {
             m.put("description", p.getDescription());
             m.put("category", p.getCategory() != null ? p.getCategory().name() : null);
             m.put("author", p.getAuthor());
+            m.put("authorNickname", getDeveloperNickname(p.getDeveloperId()));
             m.put("downloads", p.getDownloads());
             m.put("rating", p.getRating());
             m.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);
@@ -91,17 +99,33 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> getUsers() {
-        List<Developer> devs = developerRepository.findAll();
+        List<Developer> devs = developerRepository.findAllByDeletedFalse();
         return devs.stream().map(d -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", d.getId());
             m.put("username", d.getUsername());
+            m.put("nickname", d.getNickname() != null ? d.getNickname() : "");
             m.put("email", d.getEmail());
             m.put("role", d.getRole() != null ? d.getRole().name() : "DEVELOPER");
             m.put("enabled", d.isEnabled());
             m.put("createdAt", d.getCreatedAt() != null ? d.getCreatedAt().toString() : null);
             return m;
         }).toList();
+    }
+
+    public Page<Map<String, Object>> getUserLoginLogs(Long userId, Pageable pageable) {
+        Page<LoginLog> logs = loginLogRepository.findByDeveloperIdOrderByCreatedAtDesc(userId, pageable);
+        var content = logs.getContent().stream().map(l -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", l.getId());
+            m.put("username", l.getUsername());
+            m.put("ip", l.getIp());
+            m.put("success", l.isSuccess());
+            m.put("detail", l.getDetail());
+            m.put("createdAt", l.getCreatedAt() != null ? l.getCreatedAt().toString() : null);
+            return m;
+        }).toList();
+        return new PageImpl<>(content, pageable, logs.getTotalElements());
     }
 
     @Transactional
@@ -139,6 +163,29 @@ public class AdminService {
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
         dev.setEnabled(enabled);
         developerRepository.save(dev);
+    }
+
+    @Transactional
+    public void deleteUser(Long userId, Long adminId, String password) {
+        if (userId.equals(adminId)) {
+            throw new BusinessException(400, "不能删除自己");
+        }
+        Developer admin = developerRepository.findById(adminId)
+                .orElseThrow(() -> new NoSuchElementException("Admin not found"));
+        if (!passwordEncoder.matches(password, admin.getPassword())) {
+            throw new BusinessException(403, "管理员密码错误");
+        }
+        Developer dev = developerRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+        dev.setDeleted(true);
+        developerRepository.save(dev);
+    }
+
+    private String getDeveloperNickname(Long developerId) {
+        if (developerId == null) return null;
+        return developerRepository.findById(developerId)
+                .map(d -> d.getNickname() != null ? d.getNickname() : d.getUsername())
+                .orElse(null);
     }
 
     @Transactional

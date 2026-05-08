@@ -5,8 +5,12 @@ import com.zutils.server.service.AdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -83,11 +87,34 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("User enabled"));
     }
 
+    @DeleteMapping("/users/{userId}")
+    @Operation(summary = "Delete a user (requires admin password)")
+    public ResponseEntity<ApiResponse<String>> deleteUser(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal(expression = "id") Long adminId,
+            @RequestBody Map<String, String> body) {
+        String password = body != null ? body.get("password") : null;
+        if (password == null || password.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(400, "需要管理员密码确认"));
+        }
+        adminService.deleteUser(userId, adminId, password);
+        return ResponseEntity.ok(ApiResponse.success("User deleted"));
+    }
+
     @DeleteMapping("/plugins/{pluginId}")
     @Operation(summary = "Delete a plugin (DB + GitHub)")
     public ResponseEntity<ApiResponse<String>> deletePlugin(@PathVariable String pluginId) {
         adminService.deletePlugin(pluginId);
         return ResponseEntity.ok(ApiResponse.success("Plugin deleted"));
+    }
+
+    @GetMapping("/users/{userId}/logs")
+    @Operation(summary = "Get login logs for a user")
+    public ResponseEntity<ApiResponse<Page<Map<String, Object>>>> getUserLogs(
+            @PathVariable Long userId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(adminService.getUserLoginLogs(userId, pageable)));
     }
 
     public record CreateUserRequest(

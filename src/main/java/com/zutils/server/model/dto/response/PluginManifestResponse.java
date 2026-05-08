@@ -18,7 +18,11 @@ public class PluginManifestResponse {
     private String dexUrl;
     private String className;
     private String checksum;
+    private String signature;
     private Long size;
+    private String author;
+    private String memberUid;
+    private String authorNickname;
     private List<ParameterDto> parameters;
     private List<String> requiredPermissions;
     private List<DependencyDto> dependencies;

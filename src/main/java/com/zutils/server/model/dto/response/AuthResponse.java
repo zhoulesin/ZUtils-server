@@ -14,12 +14,25 @@ public class AuthResponse {
     @Getter
     @Setter
     @NoArgsConstructor
-    @AllArgsConstructor
     @Builder
     public static class DeveloperInfo {
         private Long id;
         private String username;
+        private String nickname;
         private String email;
         private String role;
+        private String memberUid;
+        private String avatarUrl;
+
+        public DeveloperInfo(Long id, String username, String nickname, String email, String role,
+                             String memberUid, String avatarUrl) {
+            this.id = id;
+            this.username = username;
+            this.nickname = nickname;
+            this.email = email;
+            this.role = role;
+            this.memberUid = memberUid;
+            this.avatarUrl = avatarUrl;
+        }
     }
 }

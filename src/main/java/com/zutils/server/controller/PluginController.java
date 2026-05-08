@@ -56,6 +56,15 @@ public class PluginController {
         return ResponseEntity.ok(ApiResponse.success(plugins));
     }
 
+    @GetMapping("/my")
+    @Operation(summary = "Get my plugins (developer-specific)")
+    public ResponseEntity<ApiResponse<Page<PluginListResponse>>> getMyPlugins(
+            @AuthenticationPrincipal DeveloperDetails principal,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        Page<PluginListResponse> plugins = pluginService.getMyPlugins(principal.getId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(plugins));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get plugin detail")
     public ResponseEntity<ApiResponse<PluginDetailResponse>> getPlugin(@PathVariable String id) {

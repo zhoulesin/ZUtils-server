@@ -14,6 +14,7 @@ public class PluginListResponse {
     private String icon;
     private String category;
     private String author;
+    private String authorNickname;
     private String version;
     private Long downloads;
     private Double rating;

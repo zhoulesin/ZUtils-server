@@ -15,16 +15,22 @@ public class DeveloperDetails implements UserDetails {
 
     private final Long id;
     private final String username;
+    private final String nickname;
     private final String email;
     private final String password;
     private final Role role;
+    private final boolean enabled;
+    private final boolean deleted;
 
     public DeveloperDetails(Developer developer) {
         this.id = developer.getId();
         this.username = developer.getUsername();
+        this.nickname = developer.getNickname();
         this.email = developer.getEmail();
         this.password = developer.getPassword();
         this.role = developer.getRole();
+        this.enabled = developer.isEnabled();
+        this.deleted = developer.isDeleted();
     }
 
     @Override
@@ -37,14 +43,11 @@ public class DeveloperDetails implements UserDetails {
     public boolean isAccountNonExpired() { return true; }
 
     @Override
-    public boolean isAccountNonLocked() { return true; }
+    public boolean isAccountNonLocked() { return !deleted; }
 
     @Override
     public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() {
-        // 直接从 developer 实体读取 enabled 状态
-        return true; // 通过 UserDetailsService 加载时已确认
-    }
+    public boolean isEnabled() { return enabled && !deleted; }
 }
