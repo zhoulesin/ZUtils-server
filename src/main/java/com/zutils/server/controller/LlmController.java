@@ -103,7 +103,8 @@ public class LlmController {
                         (String) p.getOrDefault("name", ""),
                         (String) p.getOrDefault("description", ""),
                         (String) p.getOrDefault("type", "STRING"),
-                        p.containsKey("required") && Boolean.TRUE.equals(p.get("required"))
+                        p.containsKey("required") && Boolean.TRUE.equals(p.get("required")),
+                        null
                 ))
                 .collect(Collectors.toList());
         return new LlmService.FunctionSchema(name, description, params);

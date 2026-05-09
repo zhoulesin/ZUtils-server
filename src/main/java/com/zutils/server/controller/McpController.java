@@ -249,50 +249,50 @@ public class McpController {
                 new LlmService.FunctionSchema(
                         "weather_current", "查询指定城市的实时天气和未来预报",
                         List.of(
-                                new LlmService.ParamSchema("location", "城市名，如 北京、东京", "STRING", true),
-                                new LlmService.ParamSchema("days", "预报天数（选填，默认1）", "NUMBER", false)
+                                new LlmService.ParamSchema("location", "城市名，如 北京、东京", "STRING", true, null),
+                                new LlmService.ParamSchema("days", "预报天数（选填，默认1）", "NUMBER", false, null)
                         )),
                 new LlmService.FunctionSchema(
                         "translate_text", "将文本翻译成目标语言。当需要翻译功能时调用此函数",
                         List.of(
-                                new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
-                                new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
+                                new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true, "previous_step_result"),
+                                new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true, null)
                         )),
                 new LlmService.FunctionSchema(
                         "news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文",
                         List.of(
-                                new LlmService.ParamSchema("category", "新闻类别（选填）", "STRING", false),
-                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
+                                new LlmService.ParamSchema("category", "新闻类别（选填）", "STRING", false, null),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false, null)
                         )),
                 new LlmService.FunctionSchema(
                         "geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
                         List.of(
-                                new LlmService.ParamSchema("ip", "IP 地址（选填）", "STRING", false)
+                                new LlmService.ParamSchema("ip", "IP 地址（选填）", "STRING", false, null)
                         )),
                 new LlmService.FunctionSchema(
                         "qrcode_generate", "生成二维码图片，返回 base64 编码的 PNG",
                         List.of(
-                                new LlmService.ParamSchema("content", "二维码内容", "STRING", true),
-                                new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false)
+                                new LlmService.ParamSchema("content", "二维码内容", "STRING", true, null),
+                                new LlmService.ParamSchema("size", "图片尺寸（选填，默认300）", "NUMBER", false, null)
                         )),
                 new LlmService.FunctionSchema(
                         "web_search", "搜索互联网，返回网页标题、链接和摘要",
                         List.of(
-                                new LlmService.ParamSchema("query", "搜索关键词", "STRING", true),
-                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)
+                                new LlmService.ParamSchema("query", "搜索关键词", "STRING", true, null),
+                                new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false, null)
                         )),
                 new LlmService.FunctionSchema(
                         "email_send", "发送邮件到指定收件人",
                         List.of(
-                                new LlmService.ParamSchema("to", "收件人邮箱", "STRING", true),
-                                new LlmService.ParamSchema("subject", "邮件主题", "STRING", true),
-                                new LlmService.ParamSchema("body", "邮件正文", "STRING", true)
+                                new LlmService.ParamSchema("to", "收件人邮箱", "STRING", true, null),
+                                new LlmService.ParamSchema("subject", "邮件主题", "STRING", true, null),
+                                new LlmService.ParamSchema("body", "邮件正文", "STRING", true, null)
                         )),
                 new LlmService.FunctionSchema(
                         "document_summarize", "对文档内容进行摘要总结或润色优化",
                         List.of(
-                                new LlmService.ParamSchema("content", "文档文本内容", "STRING", true),
-                                new LlmService.ParamSchema("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false)
+                                new LlmService.ParamSchema("content", "文档文本内容", "STRING", true, "previous_step_result"),
+                                new LlmService.ParamSchema("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false, null)
                         ))
         );
 
