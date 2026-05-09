@@ -73,7 +73,14 @@ public class LlmService {
         }
 
         try {
-            List<FunctionDef> functions = collectFunctions();
+            // Collect marketplace plugins with full metadata
+            List<PluginManifestResponse> manifest = collectPluginManifest();
+            Map<String, PluginManifestResponse> dexByFunction = new LinkedHashMap<>();
+            for (PluginManifestResponse p : manifest) {
+                dexByFunction.put(p.getFunctionName(), p);
+            }
+
+            List<FunctionDef> functions = buildFunctionDefs(manifest);
             log.info("Marketplace plugins: {}", functions.size());
             // Merge with built-in functions from Android device
             if (builtinFunctions != null) {
@@ -127,7 +134,7 @@ public class LlmService {
             }
 
             log.info("LLM raw response:\n{}", response.body().length() > 3000 ? response.body().substring(0, 3000) + "..." : response.body());
-            return parseResponse(response.body(), userInput);
+            return parseResponse(response.body(), userInput, dexByFunction);
 
         } catch (Exception e) {
             log.error("LLM parse error, baseUrl={}", baseUrl, e);
@@ -136,35 +143,37 @@ public class LlmService {
         }
     }
 
-    private List<FunctionDef> collectFunctions() {
-        List<FunctionDef> result = new ArrayList<>();
-
-        // Marketplace plugins (approved)
+    private List<PluginManifestResponse> collectPluginManifest() {
         try {
-            List<PluginManifestResponse> manifest = pluginService.getManifest();
-            for (PluginManifestResponse p : manifest) {
-                List<ParamDef> params = new ArrayList<>();
-                if (p.getParameters() != null) {
-                    for (ParameterDto dto : p.getParameters()) {
-                        params.add(new ParamDef(
-                                dto.getName(),
-                                dto.getDescription() != null ? dto.getDescription() : "",
-                                dto.getType() != null ? dto.getType() : "STRING",
-                                dto.isRequired()
-                        ));
-                    }
-                }
-                result.add(new FunctionDef(
-                        p.getFunctionName(),
-                        p.getDescription() != null ? p.getDescription() : "",
-                        params
-                ));
-            }
+            return pluginService.getManifest();
         } catch (Exception e) {
             log.warn("Failed to collect marketplace plugins", e);
+            return List.of();
         }
+    }
 
+    private List<FunctionDef> buildFunctionDefs(List<PluginManifestResponse> manifest) {
+        List<FunctionDef> result = new ArrayList<>();
+        for (PluginManifestResponse p : manifest) {
+            List<ParamDef> params = new ArrayList<>();
+            if (p.getParameters() != null) {
+                for (ParameterDto dto : p.getParameters()) {
+                    params.add(new ParamDef(
+                            dto.getName(),
+                            dto.getDescription() != null ? dto.getDescription() : "",
+                            dto.getType() != null ? dto.getType() : "STRING",
+                            dto.isRequired()
+                    ));
+                }
+            }
+            result.add(new FunctionDef(
+                    p.getFunctionName(),
+                    p.getDescription() != null ? p.getDescription() : "",
+                    params
+            ));
+        }
         return result;
+    }
     }
 
     private String buildSystemPrompt(List<FunctionDef> functions) {
@@ -240,7 +249,8 @@ public class LlmService {
         };
     }
 
-    private LlmResult parseResponse(String responseBody, String userInput) {
+    private LlmResult parseResponse(String responseBody, String userInput,
+                                     Map<String, PluginManifestResponse> dexByFunction) {
         try {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(responseBody);
@@ -288,6 +298,7 @@ public class LlmService {
                 Map<String, Object> step = new LinkedHashMap<>();
                 step.put("function", name);
                 step.put("args", args);
+                step.putAll(classifyStep(name, dexByFunction));
                 steps.add(step);
             }
 
@@ -467,6 +478,52 @@ public class LlmService {
 
     public record FunctionSchema(String name, String description, List<ParamSchema> parameters) {}
     public record ParamSchema(String name, String description, String type, boolean required) {}
+
+    /**
+     * 公开方法：根据函数名返回执行类型（供 LlmController.chat 使用）。
+     */
+    public String classifyType(String functionName) {
+        if (MCP_TOOL_NAMES.contains(functionName)) return "mcp";
+        // 有 pluginService 可查时再补充 dex 判断；此处仅返回非 mcp
+        return "local";
+    }
+
+    /** Server 端已知的 MCP 工具名集合（与 McpController.listTools 一致）。 */
+    private static final Set<String> MCP_TOOL_NAMES = Set.of(
+        "weather_current", "translate_text", "news_headlines",
+        "geo_location", "qrcode_generate", "web_search",
+        "email_send", "document_summarize"
+    );
+
+    private static final Set<String> MCP_TOOL_NAMES = Set.of(
+        "weather_current", "translate_text", "news_headlines",
+        "geo_location", "qrcode_generate", "web_search",
+        "email_send", "document_summarize"
+    );
+
+    /**
+     * 分类函数执行类型，并为 DEX 插件补充元数据。
+     * @param functionName 函数名
+     * @param dexByFunction 按函数名索引的市场插件
+     * @return {type, dexUrl, className, checksum, signature} 的 Map
+     */
+    private Map<String, Object> classifyStep(String functionName,
+                                              Map<String, PluginManifestResponse> dexByFunction) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        if (MCP_TOOL_NAMES.contains(functionName)) {
+            meta.put("type", "mcp");
+        } else if (dexByFunction.containsKey(functionName)) {
+            PluginManifestResponse p = dexByFunction.get(functionName);
+            meta.put("type", "dex");
+            meta.put("dexUrl", p.getDexUrl());
+            meta.put("className", p.getClassName());
+            meta.put("checksum", p.getChecksum());
+            meta.put("signature", p.getSignature());
+        } else {
+            meta.put("type", "local");
+        }
+        return meta;
+    }
 
     public static class ChatResult {
         private final boolean success;

@@ -43,9 +43,11 @@ public class LlmController {
         Map<String, Object> data = new LinkedHashMap<>();
         if (result.isSuccess()) {
             data.put("steps", result.getSteps());
+            data.put("summary", result.getSummary());
             data.put("error", null);
         } else {
             data.put("steps", List.of());
+            data.put("summary", null);
             data.put("error", result.getError());
         }
 
@@ -72,7 +74,7 @@ public class LlmController {
         if (result.isSuccess() && result.isToolCall()) {
             data.put("toolName", result.getToolName());
             data.put("toolArgs", result.getToolArgs());
-            data.put("type", "local");
+            data.put("type", llmService.classifyType(result.getToolName()));
             data.put("text", null);
             data.put("dexUrl", null);
             data.put("className", null);
