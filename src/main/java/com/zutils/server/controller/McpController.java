@@ -75,7 +75,7 @@ public class McpController {
                 ),
                 Map.of(
                         "name", "translate_text",
-                        "description", "将文本翻译成目标语言",
+                        "description", "将文本翻译成目标语言。当用户要求中文而内容为英文时调用此函数",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -87,7 +87,7 @@ public class McpController {
                 ),
                 Map.of(
                         "name", "news_headlines",
-                        "description", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
+                        "description", "获取最新新闻头条，按分类返回。返回内容为英文",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -253,13 +253,13 @@ public class McpController {
                                 new LlmService.ParamSchema("days", "预报天数（选填，默认1）", "NUMBER", false)
                         )),
                 new LlmService.FunctionSchema(
-                        "translate_text", "将文本翻译成目标语言",
+                        "translate_text", "将文本翻译成目标语言。当用户要求中文而内容为英文时调用此函数",
                         List.of(
                                 new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
                                 new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
                         )),
                 new LlmService.FunctionSchema(
-                        "news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
+                        "news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文",
                         List.of(
                                 new LlmService.ParamSchema("category", "新闻类别（选填）", "STRING", false),
                                 new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)

@@ -186,10 +186,10 @@ public class LlmService {
         result.add(new FunctionDef("weather_current", "查询指定城市的实时天气和未来预报",
                 List.of(new ParamDef("location", "城市名，如 北京、东京", "STRING", true),
                         new ParamDef("days", "预报天数（选填，默认1）", "NUMBER", false))));
-        result.add(new FunctionDef("translate_text", "将文本翻译成目标语言",
+        result.add(new FunctionDef("translate_text", "将文本翻译成目标语言。当用户要求中文而内容为英文时调用此函数",
                 List.of(new ParamDef("text", "要翻译的文本", "STRING", true),
                         new ParamDef("target_lang", "目标语言代码，如 en、zh", "STRING", true))));
-        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
+        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文",
                 List.of(new ParamDef("category", "新闻类别（选填）", "STRING", false),
                         new ParamDef("limit", "返回条数（选填，默认5）", "NUMBER", false))));
         result.add(new FunctionDef("geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
