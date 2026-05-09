@@ -75,7 +75,7 @@ public class McpController {
                 ),
                 Map.of(
                         "name", "translate_text",
-                        "description", "将文本翻译成目标语言。当用户要求中文而内容为英文时调用此函数",
+                        "description", "将文本翻译成目标语言。当需要翻译功能时调用此函数",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -253,7 +253,7 @@ public class McpController {
                                 new LlmService.ParamSchema("days", "预报天数（选填，默认1）", "NUMBER", false)
                         )),
                 new LlmService.FunctionSchema(
-                        "translate_text", "将文本翻译成目标语言。当用户要求中文而内容为英文时调用此函数",
+                        "translate_text", "将文本翻译成目标语言。当需要翻译功能时调用此函数",
                         List.of(
                                 new LlmService.ParamSchema("text", "要翻译的文本", "STRING", true),
                                 new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
