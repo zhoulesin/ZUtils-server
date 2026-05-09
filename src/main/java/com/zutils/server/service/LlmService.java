@@ -209,7 +209,6 @@ public class LlmService {
                         new ParamDef("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false))));
         return result;
     }
-    }
 
     private String buildSystemPrompt(List<FunctionDef> functions) {
         StringBuilder sb = new StringBuilder();
@@ -232,8 +231,8 @@ public class LlmService {
                 5. 不需要参数的函数传入空对象 {}
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
                 7. 函数名称必须严格使用上面列出的名称，不能自己编造。
-                8. 重要：news_headlines 返回的是英文内容。如果用户用中文询问"新闻"，你必须同时调用 translate_text 将结果翻译为中文。示例：用户问"今天科技新闻"，应返回 news_headlines(category=科技) 和 translate_text(text="...", target_lang=zh)。
-                9. 日期时间字符串（如 createCalendarEvent 的 startTime/endTime）：优先带时区（Z 或 +08:00）；若无后缀如 2026-05-10T15:00，表示用户设备本地墙钟时间。与 docs/contracts/zutils-datetime-strings.md 一致。
+                 8. news_headlines 返回英文内容。如果用户要求翻译，同时调用 translate_text。translate_text 的 text 参数设为 "News: " + category 值。
+                 9. 日期时间字符串（如 createCalendarEvent 的 startTime/endTime）：必须使用 ISO 8601 格式，如 2026-04-28T15:00+08:00 或 2026-04-28T07:00Z。禁止使用中文相对日期（"明天""今天""后天"），必须计算为具体日期。若无时区后缀如 2026-04-28T15:00，表示用户设备本地墙钟时间。
                 """);
         return sb.toString();
     }
@@ -524,12 +523,6 @@ public class LlmService {
     }
 
     /** Server 端已知的 MCP 工具名集合（与 McpController.listTools 一致）。 */
-    private static final Set<String> MCP_TOOL_NAMES = Set.of(
-        "weather_current", "translate_text", "news_headlines",
-        "geo_location", "qrcode_generate", "web_search",
-        "email_send", "document_summarize"
-    );
-
     private static final Set<String> MCP_TOOL_NAMES = Set.of(
         "weather_current", "translate_text", "news_headlines",
         "geo_location", "qrcode_generate", "web_search",
