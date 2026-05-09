@@ -82,6 +82,11 @@ public class LlmService {
 
             List<FunctionDef> functions = buildFunctionDefs(manifest);
             log.info("Marketplace plugins: {}", functions.size());
+
+            // Add MCP tools (server-managed, not sent by Android)
+            functions.addAll(buildMcpFunctionDefs());
+            log.info("After adding MCP tools: {}", functions.size());
+
             // Merge with built-in functions from Android device
             if (builtinFunctions != null) {
                 log.info("Built-in functions from device: {}", builtinFunctions.size());
@@ -172,6 +177,36 @@ public class LlmService {
                     params
             ));
         }
+        return result;
+    }
+
+    /** 构建 Server 端 MCP 工具的函数定义（与 McpController.listTools 一致）。 */
+    private List<FunctionDef> buildMcpFunctionDefs() {
+        List<FunctionDef> result = new ArrayList<>();
+        result.add(new FunctionDef("weather_current", "查询指定城市的实时天气和未来预报",
+                List.of(new ParamDef("location", "城市名，如 北京、东京", "STRING", true),
+                        new ParamDef("days", "预报天数（选填，默认1）", "NUMBER", false))));
+        result.add(new FunctionDef("translate_text", "将文本翻译成目标语言",
+                List.of(new ParamDef("text", "要翻译的文本", "STRING", true),
+                        new ParamDef("target_lang", "目标语言代码，如 en、zh", "STRING", true))));
+        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                List.of(new ParamDef("category", "新闻类别（选填）", "STRING", false),
+                        new ParamDef("limit", "返回条数（选填，默认5）", "NUMBER", false))));
+        result.add(new FunctionDef("geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
+                List.of(new ParamDef("ip", "IP 地址（选填）", "STRING", false))));
+        result.add(new FunctionDef("qrcode_generate", "生成二维码图片，返回 base64 编码的 PNG",
+                List.of(new ParamDef("content", "二维码内容", "STRING", true),
+                        new ParamDef("size", "图片尺寸（选填，默认300）", "NUMBER", false))));
+        result.add(new FunctionDef("web_search", "搜索互联网，返回网页标题、链接和摘要",
+                List.of(new ParamDef("query", "搜索关键词", "STRING", true),
+                        new ParamDef("limit", "返回条数（选填，默认5）", "NUMBER", false))));
+        result.add(new FunctionDef("email_send", "发送邮件到指定收件人，支持HTML格式正文",
+                List.of(new ParamDef("to", "收件人邮箱", "STRING", true),
+                        new ParamDef("subject", "邮件主题", "STRING", true),
+                        new ParamDef("body", "邮件正文（支持HTML）", "STRING", true))));
+        result.add(new FunctionDef("document_summarize", "对文档内容进行摘要总结或润色优化",
+                List.of(new ParamDef("content", "文档文本内容", "STRING", true),
+                        new ParamDef("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false))));
         return result;
     }
     }
