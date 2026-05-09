@@ -224,9 +224,9 @@ public class LlmService {
         sb.append("""
 
                 规则：
-                1. 将用户需求拆解为有序的函数调用链，一次性返回所有步骤
-                2. 每个步骤独立填写入参，从用户输入中提取
-                3. 用户要求多个动作时（如"先做A再B"），必须在一次响应中返回多个 tool_calls。例如用户说"先查武汉天气再通知我"，应同时返回 weather_current(location=武汉) 和 send_notification(title=..., content=...)。
+                 1. 将用户需求拆解为有序的函数调用链，一次性返回所有步骤
+                 2. 每个步骤独立填写入参，从用户输入中提取。即使步骤 B 依赖步骤 A 的结果，步骤 B 的参数也必须从用户输入中直接提取，不要等待步骤 A 的结果。
+                 3. 用户要求多个动作时（如"先做A再B"），必须在一次响应中返回多个 tool_calls。例如用户说"先查武汉天气再通知我"，应同时返回 weather_current(location=武汉) 和 send_notification(title=..., content=...)。用户说"搜索科技新闻并翻译成中文"，应同时返回 news_headlines(category=科技) 和 translate_text(text=科技新闻, target_lang=zh)。
                 4. 对于 send_notification 的 content 参数，根据用户意图自动生成合适的文本，不要因为用户没说具体内容就不调用。
                 5. 不需要参数的函数传入空对象 {}
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
