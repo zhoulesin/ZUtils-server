@@ -189,7 +189,7 @@ public class LlmService {
         result.add(new FunctionDef("translate_text", "将文本翻译成目标语言",
                 List.of(new ParamDef("text", "要翻译的文本", "STRING", true),
                         new ParamDef("target_lang", "目标语言代码，如 en、zh", "STRING", true))));
-        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，按分类返回。注意：返回内容为英文",
                 List.of(new ParamDef("category", "新闻类别（选填）", "STRING", false),
                         new ParamDef("limit", "返回条数（选填，默认5）", "NUMBER", false))));
         result.add(new FunctionDef("geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
@@ -230,9 +230,8 @@ public class LlmService {
                 4. 对于 send_notification 的 content 参数，根据用户意图自动生成合适的文本，不要因为用户没说具体内容就不调用。
                 5. 不需要参数的函数传入空对象 {}
                 6. 你必须始终通过函数调用（tool_calls）响应，禁止返回任何纯文字。
-                7. 函数名称必须严格使用上面列出的名称，不能自己编造。
-                 8. news_headlines 返回英文内容。如果用户要求翻译，同时调用 translate_text。translate_text 的 text 参数设为 "News: " + category 值。
-                 9. 日期时间字符串（如 createCalendarEvent 的 startTime/endTime）：必须使用 ISO 8601 格式，如 2026-04-28T15:00+08:00 或 2026-04-28T07:00Z。禁止使用中文相对日期（"明天""今天""后天"），必须计算为具体日期。若无时区后缀如 2026-04-28T15:00，表示用户设备本地墙钟时间。
+                 7. 函数名称必须严格使用上面列出的名称，不能自己编造。
+                 8. 日期时间字符串（如 createCalendarEvent 的 startTime/endTime）：必须使用 ISO 8601 格式，如 2026-04-28T15:00+08:00 或 2026-04-28T07:00Z。禁止使用中文相对日期（"明天""今天""后天"），必须计算为具体日期。若无时区后缀如 2026-04-28T15:00，表示用户设备本地墙钟时间。
                 """);
         return sb.toString();
     }
@@ -458,9 +457,7 @@ public class LlmService {
                 3. 如果工具调用成功，根据结果决定是否需要继续操作。
                 4. 使用中文回复用户。
                 5. 任务完成后，回复一段总结文字给用户，不要再调工具。
-                注意：news_headlines 返回英文内容，如果需要中文需要再调 translate_text。
-                6. 如果调用了 news_headlines 获取到多条新闻，一次传给 translate_text 翻译全部，不要逐条翻译。
-                7. 当用户问你不知道的信息（如最新消息、名人、事件等），使用 web_search 搜索。web_search 返回结果后根据内容直接回复用户。
+                6. 当用户问你不知道的信息（如最新消息、名人、事件等），使用 web_search 搜索。web_search 返回结果后根据内容直接回复用户。
                 """);
         return sb.toString();
     }

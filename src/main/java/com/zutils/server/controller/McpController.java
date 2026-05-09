@@ -87,7 +87,7 @@ public class McpController {
                 ),
                 Map.of(
                         "name", "news_headlines",
-                        "description", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                        "description", "获取最新新闻头条，按分类返回。注意：返回内容为英文",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
