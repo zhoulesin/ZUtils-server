@@ -19,11 +19,13 @@ public class TranslationMcpService {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationMcpService.class);
     private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
     public TranslationMcpService() {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
+        this.objectMapper = new ObjectMapper();
     }
 
     public String translate(String text, String targetLang) {
@@ -59,7 +61,7 @@ public class TranslationMcpService {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
-                JsonNode root = new ObjectMapper().readTree(response.body());
+                JsonNode root = objectMapper.readTree(response.body());
                 if (root.isArray() && root.size() > 0) {
                     JsonNode segment = root.get(0);
                     if (segment.isArray()) {
@@ -72,9 +74,16 @@ public class TranslationMcpService {
                         if (sb.length() > 0) return sb.toString();
                     }
                 }
+            } else {
+                log.warn("Translation API returned non-200 status: {}", response.statusCode());
             }
+        } catch (java.io.IOException e) {
+            log.error("Network error during translation: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Translation interrupted");
         } catch (Exception e) {
-            log.warn("translateSingleLine failed: {}", e.getMessage());
+            log.warn("Translation failed: {}", e.getMessage());
         }
         return text;
     }
