@@ -87,7 +87,7 @@ public class McpController {
                 ),
                 Map.of(
                         "name", "news_headlines",
-                        "description", "获取最新新闻头条，按分类返回。注意：返回内容为英文",
+                        "description", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -259,7 +259,7 @@ public class McpController {
                                 new LlmService.ParamSchema("target_lang", "目标语言代码，如 en(英语)、zh(中文)", "STRING", true)
                         )),
                 new LlmService.FunctionSchema(
-                        "news_headlines", "获取最新新闻头条，支持分类：科技、体育、财经、娱乐",
+                        "news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
                         List.of(
                                 new LlmService.ParamSchema("category", "新闻类别（选填）", "STRING", false),
                                 new LlmService.ParamSchema("limit", "返回条数（选填，默认5）", "NUMBER", false)

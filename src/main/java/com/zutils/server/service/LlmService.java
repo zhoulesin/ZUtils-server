@@ -189,7 +189,7 @@ public class LlmService {
         result.add(new FunctionDef("translate_text", "将文本翻译成目标语言",
                 List.of(new ParamDef("text", "要翻译的文本", "STRING", true),
                         new ParamDef("target_lang", "目标语言代码，如 en、zh", "STRING", true))));
-        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，按分类返回。注意：返回内容为英文",
+        result.add(new FunctionDef("news_headlines", "获取最新新闻头条，按分类返回。返回内容为英文，如果用户要求中文请额外调用 translate_text",
                 List.of(new ParamDef("category", "新闻类别（选填）", "STRING", false),
                         new ParamDef("limit", "返回条数（选填，默认5）", "NUMBER", false))));
         result.add(new FunctionDef("geo_location", "查询 IP 地址地理位置，不传 IP 查当前设备位置",
