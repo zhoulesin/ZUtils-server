@@ -8,6 +8,7 @@ import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import com.zutils.server.service.mcp.WebSearchMcpService;
 import com.zutils.server.service.mcp.EmailMcpService;
+import com.zutils.server.service.mcp.EmailDraftMcpService;
 import com.zutils.server.service.mcp.DocumentMcpService;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -58,6 +59,7 @@ public class McpServerConfig {
             QrMcpService qrService,
             WebSearchMcpService webSearchService,
             EmailMcpService emailService,
+            EmailDraftMcpService emailDraftService,
             DocumentMcpService documentService) {
 
         var weatherSchema = new McpSchema.JsonSchema("object", Map.of(
@@ -223,6 +225,28 @@ public class McpServerConfig {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("email_draft")
+                                .description("保存邮件草稿到本地，不实际发送。可后续查看或编辑")
+                                .inputSchema(new McpSchema.JsonSchema("object", Map.of(
+                                        "to", Map.of("type", "string", "description", "收件人邮箱"),
+                                        "subject", Map.of("type", "string", "description", "邮件主题"),
+                                        "body", Map.of("type", "string", "description", "邮件正文（支持HTML）")
+                                ), List.of("to", "subject", "body"), null, null, null))
+                                .build(),
+                        (exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            String to = (String) args.get("to");
+                            String subject = (String) args.get("subject");
+                            String body = (String) args.get("body");
+                            String result = emailDraftService.save(to, subject, body);
+                            log.info("[MCP] email_draft(to={}, subject={})", to, subject);
+                            return McpSchema.CallToolResult.builder()
+                                    .content(List.of(new McpSchema.TextContent(result)))
+                                    .build();
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("document_summarize")
                                 .description("对文档内容进行摘要总结或润色优化")
                                 .inputSchema(new McpSchema.JsonSchema("object", Map.of(
@@ -245,7 +269,7 @@ public class McpServerConfig {
                 )
                 .build();
 
-        log.info("MCP Server started with tools: weather_current, translate_text, news_headlines, geo_location, qrcode_generate, web_search, email_send, document_summarize");
+        log.info("MCP Server started with tools: weather_current, translate_text, news_headlines, geo_location, qrcode_generate, web_search, email_send, email_draft, document_summarize");
         return server;
     }
 }

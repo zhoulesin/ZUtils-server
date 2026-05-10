@@ -9,6 +9,7 @@ import com.zutils.server.service.mcp.TranslationMcpService;
 import com.zutils.server.service.mcp.WeatherMcpService;
 import com.zutils.server.service.mcp.WebSearchMcpService;
 import com.zutils.server.service.mcp.EmailMcpService;
+import com.zutils.server.service.mcp.EmailDraftMcpService;
 import com.zutils.server.service.mcp.DocumentMcpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,6 +34,7 @@ public class McpController {
     private final QrMcpService qrService;
     private final WebSearchMcpService webSearchService;
     private final EmailMcpService emailService;
+    private final EmailDraftMcpService emailDraftService;
     private final DocumentMcpService documentService;
     private final LlmService llmService;
 
@@ -44,6 +46,7 @@ public class McpController {
             QrMcpService qrService,
             WebSearchMcpService webSearchService,
             EmailMcpService emailService,
+            EmailDraftMcpService emailDraftService,
             DocumentMcpService documentService,
             LlmService llmService) {
         this.weatherService = weatherService;
@@ -53,6 +56,7 @@ public class McpController {
         this.qrService = qrService;
         this.webSearchService = webSearchService;
         this.emailService = emailService;
+        this.emailDraftService = emailDraftService;
         this.documentService = documentService;
         this.llmService = llmService;
     }
@@ -146,6 +150,19 @@ public class McpController {
                         )
                 ),
                 Map.of(
+                        "name", "email_draft",
+                        "description", "保存邮件草稿到本地，不实际发送。可后续查看或编辑",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "to", Map.of("type", "string", "description", "收件人邮箱"),
+                                        "subject", Map.of("type", "string", "description", "邮件主题"),
+                                        "body", Map.of("type", "string", "description", "邮件正文（支持HTML）")
+                                ),
+                                "required", List.of("to", "subject", "body")
+                        )
+                ),
+                Map.of(
                         "name", "document_summarize",
                         "description", "对文档内容进行摘要总结或润色优化",
                         "parameters", Map.of(
@@ -216,6 +233,12 @@ public class McpController {
                     String body = (String) request.arguments().get("body");
                     yield emailService.send(to, subject, body);
                 }
+                case "email_draft" -> {
+                    String to = (String) request.arguments().get("to");
+                    String subject = (String) request.arguments().get("subject");
+                    String body = (String) request.arguments().get("body");
+                    yield emailDraftService.save(to, subject, body);
+                }
                 case "document_summarize" -> {
                     String content = (String) request.arguments().get("content");
                     String action = request.arguments().containsKey("action")
@@ -283,6 +306,13 @@ public class McpController {
                         )),
                 new LlmService.FunctionSchema(
                         "email_send", "发送邮件到指定收件人",
+                        List.of(
+                                new LlmService.ParamSchema("to", "收件人邮箱", "STRING", true, null),
+                                new LlmService.ParamSchema("subject", "邮件主题", "STRING", true, null),
+                                new LlmService.ParamSchema("body", "邮件正文", "STRING", true, null)
+                        )),
+                new LlmService.FunctionSchema(
+                        "email_draft", "保存邮件草稿到本地，不实际发送",
                         List.of(
                                 new LlmService.ParamSchema("to", "收件人邮箱", "STRING", true, null),
                                 new LlmService.ParamSchema("subject", "邮件主题", "STRING", true, null),
@@ -361,6 +391,12 @@ public class McpController {
                         String subject = (String) args.get("subject");
                         String body = (String) args.get("body");
                         yield emailService.send(to, subject, body);
+                    }
+                    case "email_draft" -> {
+                        String to = (String) args.get("to");
+                        String subject = (String) args.get("subject");
+                        String body = (String) args.get("body");
+                        yield emailDraftService.save(to, subject, body);
                     }
                     case "document_summarize" -> {
                         String content = (String) args.get("content");

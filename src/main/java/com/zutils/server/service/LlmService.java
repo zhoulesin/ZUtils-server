@@ -202,6 +202,10 @@ public class LlmService {
                 List.of(new ParamDef("to", "收件人邮箱", "STRING", true, null),
                         new ParamDef("subject", "邮件主题", "STRING", true, null),
                         new ParamDef("body", "邮件正文（支持HTML）", "STRING", true, null))));
+        result.add(new FunctionDef("email_draft", "保存邮件草稿到本地，不实际发送。可后续查看或编辑",
+                List.of(new ParamDef("to", "收件人邮箱", "STRING", true, null),
+                        new ParamDef("subject", "邮件主题", "STRING", true, null),
+                        new ParamDef("body", "邮件正文", "STRING", true, null))));
         result.add(new FunctionDef("document_summarize", "对文档内容进行摘要总结或润色优化",
                 List.of(new ParamDef("content", "文档文本内容", "STRING", true, "previous_step_result"),
                         new ParamDef("action", "summarize(摘要) 或 polish(润色)，默认 summarize", "STRING", false, null))));
@@ -780,7 +784,7 @@ public class LlmService {
     private static final Set<String> MCP_TOOL_NAMES = Set.of(
         "weather_current", "translate_text", "news_headlines",
         "geo_location", "qrcode_generate", "web_search",
-        "email_send", "document_summarize"
+        "email_send", "email_draft", "document_summarize"
     );
 
     /**
